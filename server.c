@@ -9,6 +9,7 @@
 
 #define BUF_SIZE 100
 #define MAX_CLNT 256
+#define PACKET_SIZE 1082
 
 void * handle_clnt(void * arg);
 void error_handling(char * msg);
@@ -120,40 +121,57 @@ void * handle_clnt(void * arg)
 	int str_len=0, i;
 	char msg[BUF_SIZE];
 
-	Packet *recv_packet = malloc(sizeof(Packet));
+	Packet *recv_packet = malloc(sizeof(recv_packet)+PACKET_SIZE);
 	if (recv_packet == NULL)
 	{
 		error_handling("recv_packet Pointer is NULL\n");
 		return (void*)-1;
 	}
-	memset(recv_packet,0,sizeof(Packet));
+	memset(recv_packet,0,sizeof(recv_packet)+PACKET_SIZE);
 
-	while((str_len=read(clnt_sock, (char*)recv_packet, sizeof(recv_packet)))!=0)
+	while((str_len=read(clnt_sock, (char*)recv_packet, sizeof(recv_packet)+PACKET_SIZE))!=0)
 	{
-		printf("Command : %s", recv_packet->cmdOrResult);
-		printf("buf : %s", recv_packet->buf);
+		printf("str_len = %d\n",str_len);
+		printf("Command : %s\n", recv_packet->cmdOrResult);
+		printf("buf : %s\n", recv_packet->buf);
 		if(strcmp(recv_packet->cmdOrResult,"Command") == 0)
 		{
+			int str_Length = strlen(recv_packet->buf);
+			char* newStrPtr = (char*)malloc(sizeof(char)*(str_Length+1));
+			printf("check1\n");
 			if(clnt_sock == 4)
 			{
-				strcpy(history_arr_C1[history_count_C1],recv_packet->buf);
+				printf("check1_1\n");
+				history_arr_C1[history_count_C1] = newStrPtr;
 				history_count_C1++;
 			}
-			else if(clnt_sock == 5)
+
+			printf("check1_2\n");
+
+			if(clnt_sock == 5)
 			{
-				strcpy(history_arr_C1[history_count_C2],recv_packet->buf);
+				printf("check1_2\n");
+				history_arr_C2[history_count_C2] = newStrPtr;
                                 history_count_C2++;
 			}
 
-
+			printf("Before Send_msg\n");
 			send_msg(msg, str_len,clnt_sock,recv_packet);
+			printf("Before free recvpacket\n");
 			free(recv_packet);
 			continue;
 		}
-		send_msg(msg, str_len,clnt_sock,recv_packet);
+
+		if(strcmp(recv_packet->cmdOrResult,"Print_Result") == 0)
+                {
+			printf("Print Result:%s\n",recv_packet->buf);
+			send_msg(msg, str_len,clnt_sock,recv_packet);
+		}
+		printf("check2\n");
+		//send_msg(msg, str_len,clnt_sock,recv_packet);
 		free(recv_packet);
-		Packet *recv_packet = malloc(sizeof(Packet));
-		memset(recv_packet,0,sizeof(Packet));
+		Packet *recv_packet = malloc(sizeof(recv_packet)+PACKET_SIZE);
+		memset(recv_packet,0,sizeof(recv_packet)+PACKET_SIZE);
 	}
 
 
@@ -181,11 +199,16 @@ void send_msg(char * msg, int len, int sock_num, Packet *p)   // send to all
 
 	//pthread_mutex_lock(&mutx);
 	for(i=0; i<clnt_cnt; i++)
+	{
 		if(clnt_socks[i]==clnt_sock)
+		{
 			continue;
+		}
 		// 구조체 먼저
-		write(clnt_socks[i], (char*)p,sizeof(p));
+		write(clnt_socks[i], (char*)p,sizeof(p)+PACKET_SIZE);
 	//pthread_mutex_unlock(&mutx);
+	}
+	printf("write success!!\n");
 }
 void error_handling(char * msg)
 {

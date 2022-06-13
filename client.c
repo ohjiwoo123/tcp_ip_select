@@ -30,7 +30,7 @@ typedef struct
 
 int main(int argc, char *argv[])
 {
-	printf("size of Packet : %d",sizeof(Packet));
+	//printf("size of Packet : %d\n",sizeof(Packet));
 	int sock;
 	struct sockaddr_in serv_addr;
 	pthread_t snd_thread, rcv_thread;
@@ -67,13 +67,13 @@ void * send_msg(void * arg)   // send thread main
 
 	while(1)
 	{
-		Packet *send_packet = malloc(sizeof(Packet)+PACKET_SIZE);
+		Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
 		if (send_packet == NULL)
 		{
 			error_handling("send_packet Pointer is NULL\n");
 			return (void*)-1;
 		}
-		memset(send_packet,0,sizeof(Packet)+PACKET_SIZE);
+		memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
 
 		fgets(name_msg, BUF_SIZE, stdin);
 		if(!strcmp(send_packet->buf,"q\n")||!strcmp(send_packet->buf,"Q\n"))
@@ -90,7 +90,9 @@ void * send_msg(void * arg)   // send thread main
 		strcpy(send_packet->Name,name);
 		//write(sock, name_msg, strlen(name_msg));
 		printf("sizeof packet : %d before free\n",sizeof(send_packet));
-		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE;
+		printf("buf : %s, cmdorresult : %s, name : %s\n",send_packet->buf,send_packet->cmdOrResult,send_packet->Name);
+		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
+
 		free(send_packet);
 	}
 	return NULL;
@@ -103,16 +105,20 @@ void * recv_msg(void * arg)   // read thread main
 	int str_len;
 	while(1)
 	{
-		Packet *recv_packet = malloc(sizeof(Packet));
-		memset(recv_packet,0,sizeof(Packet));
+		printf("readstart!!\n");
+		Packet *recv_packet = malloc(sizeof(recv_packet)+PACKET_SIZE);
+		memset(recv_packet,0,sizeof(recv_packet)+PACKET_SIZE);
 		// 구조체 정보 먼저 받기, 커맨드인지 출력물인지 
-		if(read(sock,(char*)recv_packet,sizeof(recv_packet))<=0)
+		if(read(sock,(char*)recv_packet,sizeof(recv_packet)+PACKET_SIZE)<=0)
 		{
 			error_handling("read struct Failed!\n");
                         return (void*)-1;
 		}
+		printf("readsuccess!!\n");
 		if(strcmp(recv_packet->cmdOrResult,"Command")==0)
 		{
+			printf("inside Command\n");
+			printf("Command is %s\n",recv_packet->buf);
 			//str_len=read(sock, name_msg, BUF_SIZE-1);
 	                //if(str_len==-1)
         	        //        return (void*)-1;
@@ -126,10 +132,12 @@ void * recv_msg(void * arg)   // read thread main
 			}
 			while(fgets(recv_packet->buf,BUF_SIZE,fp))
 			{
-				Packet *send_packet2 = malloc(sizeof(Packet));
-				memset(send_packet2,0,sizeof(Packet));
+				printf("insideof fgets func\n");
+				Packet *send_packet2 = malloc(sizeof(send_packet2)+PACKET_SIZE);
+				memset(send_packet2,0,sizeof(send_packet2)+PACKET_SIZE);
 				strcpy(send_packet2->cmdOrResult,"Print_Result");
-				if(write(sock,(char*)send_packet2,sizeof(send_packet2)) <= 0)
+				strcpy(send_packet2->buf,recv_packet->buf);
+				if(write(sock,(char*)send_packet2,sizeof(send_packet2)+PACKET_SIZE) <= 0)
 				{
 					close(sock);
 					break;
