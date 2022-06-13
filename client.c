@@ -8,6 +8,7 @@
 
 #define BUF_SIZE 1024
 #define NAME_SIZE 20
+#define PACKET_SIZE 1082
 
 void * send_msg(void * arg);
 void * recv_msg(void * arg);
@@ -24,39 +25,17 @@ typedef struct
 	char Name[20];
 	char cmdOrResult[20];
         char buf[BUF_SIZE];
-}
-Packet;
+}Packet;
 #pragma pack(pop)
 
 int main(int argc, char *argv[])
 {
-	//Declare and initialize a client socket address structure
-	struct sockaddr_in client_addr;
-	bzero(&client_addr, sizeof(client_addr));
-	client_addr.sin_family = AF_INET;
-	client_addr.sin_addr.s_addr = htons(INADDR_ANY);
-	client_addr.sin_port = htons(0);
-
-	//Creates a socket and returns the socket descriptor if successful
-	int client_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if(client_socket_fd < 0)
-	{
-	  perror("Create Socket Failed:");
-	  exit(1);
-	}
-
-	//Binding the client socket and the client socket address structure is not required
-	if(-1 == (bind(client_socket_fd, (struct sockaddr*)&client_addr, sizeof(client_addr))))
-	{
-	  perror("Client Bind Failed:");
-	  exit(1);
-	}
-
+	printf("size of Packet : %d",sizeof(Packet));
 	int sock;
 	struct sockaddr_in serv_addr;
 	pthread_t snd_thread, rcv_thread;
 	void * thread_return;
-	if(argc!=3)
+	if(argc!=4)
 	{
 		printf("Usage : %s <IP> <port> <name>\n", argv[0]);
 		exit(1);
@@ -85,29 +64,34 @@ void * send_msg(void * arg)   // send thread main
 {
 	int sock=*((int*)arg);
 	char name_msg[BUF_SIZE];
+
 	while(1)
 	{
+		Packet *send_packet = malloc(sizeof(Packet)+PACKET_SIZE);
+		if (send_packet == NULL)
+		{
+			error_handling("send_packet Pointer is NULL\n");
+			return (void*)-1;
+		}
+		memset(send_packet,0,sizeof(Packet)+PACKET_SIZE);
+
 		fgets(name_msg, BUF_SIZE, stdin);
-		if(!strcmp(name_msg,"q\n")||!strcmp(name_msg,"Q\n"))
+		if(!strcmp(send_packet->buf,"q\n")||!strcmp(send_packet->buf,"Q\n"))
 		{
 			close(sock);
 			exit(0);
 		}
 		//sprintf(name_msg,"%s %s", name, msg);
 
-		Packet *send_packet = malloc(sizeof(send_packet));
-		if (send_packet == NULL)
-		{
-			printf("send_packet Pointer is NULL\n");
-			return (void*)-1;
-		}
-		strcpy(send_packet->IP_Address,);
-		send_packet->Port = ;
+		//strcpy(send_packet->IP_Address,);
+		//send_packet->Port = ;
+		strcpy(send_packet->buf,name_msg);
 		strcpy(send_packet->cmdOrResult,"Command");
 		strcpy(send_packet->Name,name);
 		//write(sock, name_msg, strlen(name_msg));
-		write(sock, (char*)send_packet,sizeof(send_packet));
-		free(packet);
+		printf("sizeof packet : %d before free\n",sizeof(send_packet));
+		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE;
+		free(send_packet);
 	}
 	return NULL;
 }
@@ -119,55 +103,53 @@ void * recv_msg(void * arg)   // read thread main
 	int str_len;
 	while(1)
 	{
-		packet *recv_packet = malloc(sizeof(cmdOrResult));
+		Packet *recv_packet = malloc(sizeof(Packet));
+		memset(recv_packet,0,sizeof(Packet));
 		// 구조체 정보 먼저 받기, 커맨드인지 출력물인지 
-		if(read(sock,(char*)st2,sizeof(st2))<=0)
+		if(read(sock,(char*)recv_packet,sizeof(recv_packet))<=0)
 		{
-			printf("read struct Failed!\n");
+			error_handling("read struct Failed!\n");
                         return (void*)-1;
 		}
-		if(strcmp(st2->buf,"Command")==0)
+		if(strcmp(recv_packet->cmdOrResult,"Command")==0)
 		{
-			str_len=read(sock, name_msg, BUF_SIZE-1);
-	                if(str_len==-1)
-        	                return (void*)-1;
-		        name_msg[str_len]=0;
+			//str_len=read(sock, name_msg, BUF_SIZE-1);
+	                //if(str_len==-1)
+        	        //        return (void*)-1;
+		        //name_msg[str_len]=0;
 			FILE *fp;
-			fp = popen(name_msg,"r");
+			fp = popen(recv_packet->buf,"r");
 			if(fp == NULL)
 			{
 				perror("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
 				return (void*)-1;
 			}
-			while(fgets(name_msg,BUF_SIZE,fp))
+			while(fgets(recv_packet->buf,BUF_SIZE,fp))
 			{
-				cmdOrResult *st3 = malloc(sizeof(cmdOrResult));
-				strcpy(st3->buf,"Print_Result");
-				//printf("%s\n",buf);
-				if(write(sock,name_msg,sizeof(name_msg)) <= 0)
+				Packet *send_packet2 = malloc(sizeof(Packet));
+				memset(send_packet2,0,sizeof(Packet));
+				strcpy(send_packet2->cmdOrResult,"Print_Result");
+				if(write(sock,(char*)send_packet2,sizeof(send_packet2)) <= 0)
 				{
 					close(sock);
 					break;
 				}
-				if(write(sock,(char*)st3,sizeof(st3)) <= 0)
-				{
-					close(sock);
-					break;
-				}
-				free(st3);
+				free(send_packet2);
 			}
 			pclose(fp);
 		}
 
-		else if (strcmp(st2->buf,"Print_Result")==0)
+		else if (strcmp(recv_packet->cmdOrResult,"Print_Result")==0)
 		{
-			str_len=read(sock, name_msg, NAME_SIZE+BUF_SIZE-1);
-			if(str_len==-1)
-				return (void*)-1;
-			name_msg[str_len]=0;
-			fputs(name_msg, stdout);
+			//str_len=read(sock, name_msg, NAME_SIZE+BUF_SIZE-1);
+			//if(str_len==-1)
+			//	return (void*)-1;
+			//name_msg[str_len]=0;
+			//fputs(name_msg, stdout);
+			fputs(recv_packet->buf,stdout);
+			printf("%s\n",recv_packet->Name);
 		}
-		free(st2);
+		free(recv_packet);
 	}
 	return NULL;
 }

@@ -33,13 +33,18 @@ typedef struct socket_info
 }socket_info;
 socket_info socket_info_array[5];
 
-typedef struct cmdOrResult
+#pragma pack(push,1)
+typedef struct
 {
-	char buf[14];
-}
-cmdOrResult;
+	char IP_Address[14];
+	int Port;
+	char Name[20];
+	char cmdOrResult[20];
+	char buf[BUF_SIZE];
+}Packet;
+#pragma pack(pop)
 
-void send_msg(char * msg, int len, int sock_num, struct cmdOrResult *p);
+void send_msg(char * msg, int len, int sock_num, Packet *p);
 
 int history_count_C1 = 0;
 int history_count_C2 = 0;
@@ -77,7 +82,7 @@ int main(int argc, char *argv[])
 	{
 		if(pthread_create(&thread_PrintUI,NULL,t_PrintUI,(void*)&clnt_cnt) !=0 )
 		{
-			printf("PrintUI_Thread create error\n");
+			error_handling("PrintUI_Thread create error\n");
 			continue;
 		}
 		clnt_adr_sz=sizeof(clnt_adr);
@@ -97,10 +102,10 @@ int main(int argc, char *argv[])
 
 		if(pthread_create(&t_id, NULL, handle_clnt, (void*)&clnt_sock) != 0)
 		{
-			printf("Handle Thread create error\n");
+			error_handling("Handle Thread create error\n");
 			continue;
 		}
-		//pthread_detach(t_id);
+		pthread_detach(t_id);
 		printf("Connected client IP: %s \n", inet_ntoa(clnt_adr.sin_addr));
 		clnt_cnt++;
 	}
@@ -111,49 +116,46 @@ int main(int argc, char *argv[])
 void * handle_clnt(void * arg)
 {
 	int clnt_sock=*((int*)arg);
-	printf("%d\n",clnt_sock);
+	printf("hi iam handle thread %d\n",clnt_sock);
 	int str_len=0, i;
 	char msg[BUF_SIZE];
 
-	while((str_len=read(clnt_sock, msg, sizeof(msg)))!=0)
+	Packet *recv_packet = malloc(sizeof(Packet));
+	if (recv_packet == NULL)
 	{
-		printf("msg = %s\n",msg);
-		printf("clnt_sock=%d\n",clnt_sock);
-		// 명령어인지 출력문인지 확인하는 구조체 받기
-		cmdOrResult *st1 = malloc(sizeof(st1));
-		if (st1 == NULL)
+		error_handling("recv_packet Pointer is NULL\n");
+		return (void*)-1;
+	}
+	memset(recv_packet,0,sizeof(Packet));
+
+	while((str_len=read(clnt_sock, (char*)recv_packet, sizeof(recv_packet)))!=0)
+	{
+		printf("Command : %s", recv_packet->cmdOrResult);
+		printf("buf : %s", recv_packet->buf);
+		if(strcmp(recv_packet->cmdOrResult,"Command") == 0)
 		{
-			printf("st1 Pointer is NULL\n");
-			return -1;
-		}
-		if(read(clnt_sock,(char*)st1,sizeof(st1))<=0)
-		{
-			printf("read struct Failed!\n");
-			return -1;
-		}
-		if(strcmp(st1->buf,"Command") == 0)
-		{
-			printf("hi\n");
-			printf("st1 : %s\n",st1->buf);
 			if(clnt_sock == 4)
 			{
-				strcpy(history_arr_C1[history_count_C1],msg);
+				strcpy(history_arr_C1[history_count_C1],recv_packet->buf);
 				history_count_C1++;
 			}
-			else if(clnt_sock ==5)
+			else if(clnt_sock == 5)
 			{
-				strcpy(history_arr_C1[history_count_C2],msg);
+				strcpy(history_arr_C1[history_count_C2],recv_packet->buf);
                                 history_count_C2++;
 			}
 
 
-			send_msg(msg, str_len,clnt_sock,st1);
-			free(st1);
+			send_msg(msg, str_len,clnt_sock,recv_packet);
+			free(recv_packet);
 			continue;
 		}
-		send_msg(msg, str_len,clnt_sock,st1);
-		free(st1);
+		send_msg(msg, str_len,clnt_sock,recv_packet);
+		free(recv_packet);
+		Packet *recv_packet = malloc(sizeof(Packet));
+		memset(recv_packet,0,sizeof(Packet));
 	}
+
 
 	//pthread_mutex_lock(&mutx);
 	for(i=0; i<clnt_cnt; i++)   // remove disconnected client
@@ -171,8 +173,9 @@ void * handle_clnt(void * arg)
 	printf("close_sock\n");
 	return NULL;
 }
-void send_msg(char * msg, int len, int sock_num, struct cmdOrResult *p)   // send to all
+void send_msg(char * msg, int len, int sock_num, Packet *p)   // send to all
 {
+	printf("send\n");
 	int i;
 	int clnt_sock = sock_num; 
 
@@ -182,7 +185,6 @@ void send_msg(char * msg, int len, int sock_num, struct cmdOrResult *p)   // sen
 			continue;
 		// 구조체 먼저
 		write(clnt_socks[i], (char*)p,sizeof(p));
-		write(clnt_socks[i], msg, len);
 	//pthread_mutex_unlock(&mutx);
 }
 void error_handling(char * msg)
@@ -196,7 +198,7 @@ void *t_PrintUI(void *arg)
 {
 	int nMenu = 0;
 
-	pthread_mutex_lock(&mutx);
+	//pthread_mutex_lock(&mutx);
 	while((nMenu = PrintUI()) !=0)
 	{
 		switch(nMenu)
@@ -215,7 +217,7 @@ void *t_PrintUI(void *arg)
 				break;
 		}
 	}
-	pthread_mutex_unlock(&mutx);
+	//pthread_mutex_unlock(&mutx);
 }
 
 int PrintUI()
