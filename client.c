@@ -89,10 +89,8 @@ void * send_msg(void * arg)   // send thread main
 		strcpy(send_packet->cmdOrResult,"Command");
 		strcpy(send_packet->Name,name);
 		//write(sock, name_msg, strlen(name_msg));
-		printf("sizeof packet : %d before free\n",sizeof(send_packet));
-		printf("buf : %s, cmdorresult : %s, name : %s\n",send_packet->buf,send_packet->cmdOrResult,send_packet->Name);
+		//printf("name:%s\n"send_packet->Name);
 		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
-
 		free(send_packet);
 	}
 	return NULL;
@@ -105,7 +103,7 @@ void * recv_msg(void * arg)   // read thread main
 	int str_len;
 	while(1)
 	{
-		printf("readstart!!\n");
+		//printf("readstart!!\n");
 		Packet *recv_packet = malloc(sizeof(recv_packet)+PACKET_SIZE);
 		memset(recv_packet,0,sizeof(recv_packet)+PACKET_SIZE);
 		// 구조체 정보 먼저 받기, 커맨드인지 출력물인지 
@@ -114,15 +112,11 @@ void * recv_msg(void * arg)   // read thread main
 			error_handling("read struct Failed!\n");
                         return (void*)-1;
 		}
-		printf("readsuccess!!\n");
+		//printf("readsuccess!!\n");
 		if(strcmp(recv_packet->cmdOrResult,"Command")==0)
 		{
-			printf("inside Command\n");
-			printf("Command is %s\n",recv_packet->buf);
-			//str_len=read(sock, name_msg, BUF_SIZE-1);
-	                //if(str_len==-1)
-        	        //        return (void*)-1;
-		        //name_msg[str_len]=0;
+			//printf("inside Command\n");
+			//printf("Command is %s\n",recv_packet->buf);
 			FILE *fp;
 			fp = popen(recv_packet->buf,"r");
 			if(fp == NULL)
@@ -137,6 +131,7 @@ void * recv_msg(void * arg)   // read thread main
 				memset(send_packet2,0,sizeof(send_packet2)+PACKET_SIZE);
 				strcpy(send_packet2->cmdOrResult,"Print_Result");
 				strcpy(send_packet2->buf,recv_packet->buf);
+				strcpy(send_packet2->Name,name);
 				if(write(sock,(char*)send_packet2,sizeof(send_packet2)+PACKET_SIZE) <= 0)
 				{
 					close(sock);
@@ -149,13 +144,7 @@ void * recv_msg(void * arg)   // read thread main
 
 		else if (strcmp(recv_packet->cmdOrResult,"Print_Result")==0)
 		{
-			//str_len=read(sock, name_msg, NAME_SIZE+BUF_SIZE-1);
-			//if(str_len==-1)
-			//	return (void*)-1;
-			//name_msg[str_len]=0;
-			//fputs(name_msg, stdout);
-			fputs(recv_packet->buf,stdout);
-			printf("%s\n",recv_packet->Name);
+			printf("명령문 출력결과 : %s from : %s\n",recv_packet->buf,recv_packet->Name);
 		}
 		free(recv_packet);
 	}
