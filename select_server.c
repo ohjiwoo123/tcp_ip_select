@@ -25,11 +25,10 @@ int PrintUI();
 void getHistory();
 void disConnect();
 void getList();
-void *handle_connection(int sock_num, fd_set reads);
+void *handle_connection(int sock_num, fd_set *reads);
 
 int clnt_cnt =0;
 int clnt_socks[MAX_CLNT];
-int getMaxfd(int n);
 
 pthread_mutex_t mutx;
 
@@ -119,15 +118,11 @@ int main(int argc, char *argv[])
 		cpy_reads=reads;
 		//timeout.tv_sec=5;
 		//timeout.tv_usec=5000;
-		//fd_max = getMaxfd(serv_sock);
-		printf("fd_max : %d\n",fd_max);
 
-		//for(i = 0; i < clnt_cnt; i++)
-		//	FD_SET(socket_info_array[clnt_cnt].sock_Num, &cpy_reads);
+		printf("fd_max : %d\n",fd_max);
 
 		if((fd_num=select(fd_max+1, &cpy_reads, 0, 0, NULL))==-1)
 		{
-			printf("check0\n");
 			perror("select 함수 에러 내용 : ");
 			break;
 		}
@@ -151,7 +146,7 @@ int main(int argc, char *argv[])
 					socket_info_array[clnt_cnt].Port = (int)ntohs(clnt_adr.sin_port);
 					socket_info_array[clnt_cnt].sock_Num = clnt_sock;
 
-					//printf("connected client: %d \n", clnt_sock);
+					printf("connected client: %d \n", clnt_sock);
 
 					// accept 이후 유저 아이피, 포트, 닉네임 읽어오기 
 					UserManageMent *user_packet = malloc(sizeof(user_packet)+UserManageMent_SIZE);
@@ -167,17 +162,17 @@ int main(int argc, char *argv[])
 
 					free(user_packet);
 					clnt_cnt++;
+					continue;
 				}
 				else    // read message!
 				{
-					handle_connection(i,reads);
-					//continue;
-					//FD_CLR(i,&reads)
+					handle_connection(i,&reads);
 				}
 			}
 		}
+		//printf("Check end of whil	e\n");
 	}
-	printf("Check\n");
+	//printf("Check\n");
 	close(serv_sock);
 	return 0;
 }
@@ -206,6 +201,9 @@ void *t_PrintUI(void *arg)
 				break;
 			case 3:
 				getHistory();
+				break;
+			default:
+				printf("메뉴의 보기에 있는 숫자 중에서 입력하세요.\n");
 				break;
 		}
 	}
@@ -248,7 +246,7 @@ void send_msg(int sock_num, Packet *p)   // send to all
 			error_handling("send error\n");
 		}
 	}
-	printf("send msg Success\n");
+	//printf("send msg Success\n");
 }
 
 int PrintUI()
@@ -265,6 +263,11 @@ int PrintUI()
 	scanf("%d", &nInput);
 	//getchar();
 	//버퍼에 남은 엔터 제거용
+	while (getchar() != '\n'); //scanf_s 버퍼 비우기, 밀림 막음
+	if (nInput > 3 || nInput < 1)
+	{
+		nInput = 4; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
+	}
 	return nInput;
 }
 
@@ -311,10 +314,10 @@ void getHistory()
 	}
 }
 
-void *handle_connection(int sock_num, fd_set reads)
+void *handle_connection(int sock_num, fd_set *reads)
 {
 	int clnt_sock= sock_num;
-	printf("hi iam handle thread %d\n",clnt_sock);
+	//printf("hi iam handle thread %d\n",clnt_sock);
 	int str_len=0, i;
 	char msg[BUF_SIZE];
 
@@ -329,19 +332,16 @@ void *handle_connection(int sock_num, fd_set reads)
 	str_len=read(clnt_sock, (char*)recv_packet, sizeof(recv_packet)+PACKET_SIZE);
 	if(str_len == 0)    // close request!
 	{
-		printf("str_len check\n");
-		printf("clnt_cnt :%d\n",clnt_cnt);
-		FD_CLR(clnt_sock, &reads);
+		printf("Close Request\n");
+		//printf("str_len check\n");
+		//printf("clnt_cnt :%d\n",clnt_cnt);
+		FD_CLR(clnt_sock, reads);
 		close(clnt_sock);
-		printf("closed client: %d \n", clnt_sock);
-		//clnt_sock = -1;
-
+		printf("%d 번 소켓 연결이 종료되었습니다.\n", clnt_sock);
 		for(int i=clnt_cnt-1; i>=0; i--)
 		{
 			if(socket_info_array[i].sock_Num == clnt_sock)
 			{
-				//close(clnt_sock);
-				//printf("%d 번 소켓 연결이 종료되었습니다.\n",clnt_sock);
 				if(i==clnt_cnt-1)
 				{
 					clnt_cnt--;
@@ -383,13 +383,13 @@ void *handle_connection(int sock_num, fd_set reads)
 
 		else if(strcmp(recv_packet->Separator,"Print_Result") == 0)
 		{
-			printf("Print Result:%s\n",recv_packet->buf);
+			//printf("Print Result:%s\n",recv_packet->buf);
 			send_msg(clnt_sock,recv_packet);
 		}
 
 		else if(strcmp(recv_packet->Separator,"Message") == 0)
 		{
-			printf("Server Recv Message : %s\n",recv_packet->buf);
+			//printf("Server Recv Message : %s\n",recv_packet->buf);
 			send_msg(clnt_sock,recv_packet);
 		}
 
@@ -399,57 +399,10 @@ void *handle_connection(int sock_num, fd_set reads)
 			send_List(clnt_sock,recv_packet);
 		}
 
-		else if(strcmp(recv_packet->Separator,"DisConnect") == 0)
-		{
-			printf("server recv Disconnect Request\n");
-			printf("클라번호 : %d\n",clnt_sock);
-
-			FD_CLR(clnt_sock, &reads);
-			shutdown(clnt_sock, SHUT_WR);
-			close(clnt_sock);
-			printf("closed client: %d check \n", clnt_sock);
-
-			//for(int i=clnt_cnt-1; i>=0; i--)
-			//{
-			//	if(socket_info_array[i].sock_Num == clnt_sock)
-			//	{
-			//		printf("종료 요청 확인: %s \n", recv_packet->Separator);
-					//close(clnt_sock);
-
-			//		printf("%d 번 소켓 연결이 종료되었습니다.\n",clnt_sock);
-			//		if(i==clnt_cnt-1)
-			//		{
-			//			clnt_cnt--;
-			//			break;
-			//		}
-			//		else
-			//		{
-			//			strcpy(socket_info_array[i].IP_Address,socket_info_array[i+1].IP_Address);
-			//			socket_info_array[i].Port = socket_info_array[i+1].Port;
-			//			socket_info_array[i].sock_Num = socket_info_array[i+1].sock_Num;
-			//			clnt_cnt--;
-			//			continue;
-			//		}
-			//	}
-			//}
-		}
 		//printf("after read\n");
 	}
 	free(recv_packet);
+	//printf("end of handle func\n");
 	return NULL;
 }
 
-int getMaxfd(int n)
-{
-	int max = n;
-	int i;
-	for(i = 0; i < clnt_cnt; i++) 
-	{
-		if(socket_info_array[i].sock_Num > max)
-		{
-			max = socket_info_array[i].sock_Num;
-		}
-	}
-	printf("max : %d",max);
-	return max;
-}

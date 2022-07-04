@@ -19,7 +19,7 @@ void disConnect(int sock);
 void send_message(int sock);
 void send_cmd(int sock);
 void getHistory();
-void *handle_connection(int sock_num, fd_set reads);
+void *handle_connection(int sock_num, fd_set *reads);
 
 void *t_PrintUI(void *data);
 //void *send_msg(void *arg);
@@ -52,8 +52,6 @@ typedef struct
 	char buf[1024];
 }Packet;
 #pragma pack(pop)
-
-int exit_flag =0;
 
 int main(int argc, char *argv[])
 {
@@ -97,8 +95,8 @@ int main(int argc, char *argv[])
 	{
 		error_handling("Sending UserInfo Failed!!\n");
 	}
-	//printf("send UserInfo Success\n");
-	//printf("sock_num : %d\n",sock);
+	printf("send UserInfo Success\n");
+	printf("sock_num : %d\n",sock);
 	free(user_packet);
 
 	FD_ZERO(&reads);
@@ -108,20 +106,18 @@ int main(int argc, char *argv[])
 
 	while(1) 
 	{
-		printf("나는 첫화면의 첫부분이다.\n");
+		cpy_reads=reads;
+		//timeout.tv_sec=5;
+		//timeout.tv_usec=5000;
+
 		if(pthread_create(&printUI_thread,NULL,t_PrintUI,(void*)&sock) !=0 )
 		{
 			error_handling("PrintUI_Thread create error\n");
 			continue;
 		}
 
-		cpy_reads=reads;
-		//timeout.tv_sec=5;
-		//timeout.tv_usec=5000;
-
 		if((fd_num=select(fd_max+1, &cpy_reads, 0, 0, NULL))==-1)
 		{
-			printf("check0\n");
 			perror("select 함수 에러 내용 : ");
 			break;
 		}
@@ -129,28 +125,12 @@ int main(int argc, char *argv[])
 		if(fd_num==0)
 			continue;
 
-		//if(FD_ISSET(0,&cpy_reads))
-		//{
-		//	if(read(0, message, BUF_SIZE) > 0) 
-		//	{
-		//		printf("키보드입력 무엇 : %s\n",message);
-		//		if(strncmp(message, "quit", 4) == 0) 
-		//		{
-		//			break;
-		//		}
-		//	}
-		//	else
-		//	{
-		//		continue;
-		//	}
-		//}
-
-		if(FD_ISSET(sock, &cpy_reads))
+		if(FD_ISSET(sock, &reads))
 		{
-			handle_connection(sock,reads);
+			handle_connection(sock,&reads);
 		}
 	}
-	//close(sock);
+	close(sock);
 	return 0;
 }
 
@@ -161,7 +141,7 @@ void error_handling(char *message)
 	exit(1);
 }
 
-void *handle_connection(int sock_num, fd_set reads)
+void *handle_connection(int sock_num, fd_set *reads)
 {
 	int sock = sock_num;
 	char name_msg[BUF_SIZE];
@@ -174,11 +154,11 @@ void *handle_connection(int sock_num, fd_set reads)
 	str_len = read(sock,(char*)recv_packet,sizeof(recv_packet)+PACKET_SIZE);
 	if(str_len == 0)
 	{
-		error_handling("read byte == 0\n");
-		//FD_CLR(sock, &reads);
-		//close(sock);
-		//printf("closed client: %d \n",sock);
-		//sock = -1;
+		//error_handling("read byte == 0\n");
+		FD_CLR(sock, reads);
+		close(sock);
+		printf("\nclosed client: %d \n",sock);
+		exit(1);
 	}
 	else 
 	{
@@ -195,12 +175,13 @@ void *handle_connection(int sock_num, fd_set reads)
 				}
 				while(fgets(recv_packet->buf,BUF_SIZE,fp))
 				{
-					printf("\ninsideof command fgets func\n");
+					//printf("\ninsideof command fgets func\n");
 					Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
 					memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
 					strcpy(send_packet->Separator,"Print_Result");
 					strcpy(send_packet->buf,recv_packet->buf);
-					strcpy(send_packet->MyName,name);
+					strcpy(send_packet->TargetName,recv_packet->TargetName);
+					strcpy(send_packet->MyName,recv_packet->MyName);
 					if(write(sock,(char*)send_packet,sizeof(send_packet)+PACKET_SIZE) <= 0)
 					{
 						close(sock);
@@ -210,11 +191,27 @@ void *handle_connection(int sock_num, fd_set reads)
 				}
 				pclose(fp);
 			}
+			else
+			{
+				free(recv_packet);
+				return NULL;
+			}
+			free(recv_packet);
+			return NULL;
 		}
 
 		else if (strcmp(recv_packet->Separator,"Print_Result")==0)
 		{
-			printf("\n%s from : %s\n",recv_packet->buf,recv_packet->TargetName);
+			//printf("myname : %s\n",recv_packet->MyName);
+			if(strcmp(recv_packet->MyName,name)==0)
+			{
+				printf("\n%s from : %s\n",recv_packet->buf,recv_packet->TargetName);
+			}
+			else
+			{
+				free(recv_packet);
+				return NULL;
+			}
 		}
 
 		else if (strcmp(recv_packet->Separator,"Message")==0)
@@ -232,23 +229,6 @@ void *handle_connection(int sock_num, fd_set reads)
 		else if (strcmp(recv_packet->Separator,"List")==0)
 		{
 			printf("\nClient List : %s\n",recv_packet->buf);
-		}
-
-		else if (strcmp(recv_packet->Separator,"DisConnect")==0)
-		{
-			printf("%s",recv_packet->buf);
-			//close(sock);
-			//if (strcmp(TargetName,MyName)==0)
-			//{
-				//printf("%s",recv_packet->buf);
-				//close(sock);
-			//}
-		}
-
-		else if (strcmp(recv_packet->Separator,"DisConnect_Accept")==0)
-		{
-			printf("%s",recv_packet->buf);
-			//close(sock);
 		}
 	}
 	free(recv_packet);
@@ -280,6 +260,9 @@ void *t_PrintUI(void *arg)
 			case 5:
 				disConnect(sock);
 				break;
+			default:
+				printf("메뉴의 보기에 있는 숫자 중에서 입력하세요.\n");
+				break;
 		}
 	}
 	pthread_mutex_unlock(&mutx);
@@ -299,6 +282,11 @@ int PrintUI()
 	scanf("%d", &nInput);
 	//getchar();
 	//버퍼에 남은 엔터 제거용
+	while (getchar() != '\n'); //scanf_s 버퍼 비우기, 밀림 막음
+	if (nInput > 5 || nInput < 1)
+	{
+		nInput = 6; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
+	}
 	return nInput;
 }
 
@@ -321,11 +309,11 @@ void getList(int sock)
 	if(strcmp(buf,"List")!=0)
 	{
 		printf("접속 유저를 보려면 List 를 정확하게 입력하세요, 처음 화면으로 돌아갑니다\n");
+		free(send_packet);
 		return;
 	}
 
 	strcpy(send_packet->Separator,buf);
-	//strcpy(send_packet->MyName,name);
 	
 	write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
 	free(send_packet);
@@ -343,9 +331,10 @@ void getHistory()
 void disConnect(int sock)
 {
 	printf("서버와의 접속이 종료됩니다.\n");
-	close(sock);
 	exit(1);
-	//return;
+	//FD_CLR(sock, &reads);
+	//close(sock);
+	//exit(1);
 }
 
 void send_message(int sock)   // send to all
@@ -384,13 +373,20 @@ void send_message(int sock)   // send to all
 		printf("귓속말 보낼 닉네임을 입력하세요\n");
 		char TargetName[20];
 		scanf("%s",TargetName);
-		strcpy(send_packet->TargetName,TargetName);
-		clearInputBuffer();
-		printf("===================================================\n");
-		printf("귓속말 보낼 내용을 입력하세요\n");
-		fgets(name_msg,BUF_SIZE,stdin);
-		strcpy(send_packet->buf,name_msg);
-		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
+		if(strcmp(TargetName,name)==0)
+		{
+			printf("자기 자신한테 귓속말을 보낼 수 없습니다.\n");
+		}
+		else
+		{
+			strcpy(send_packet->TargetName,TargetName);
+			clearInputBuffer();
+			printf("===================================================\n");
+			printf("귓속말 보낼 내용을 입력하세요\n");
+			fgets(name_msg,BUF_SIZE,stdin);
+			strcpy(send_packet->buf,name_msg);
+			write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
+		}
 	}
 	else if (index == 3)
 	{
@@ -418,17 +414,25 @@ void send_cmd(int sock)   // send to all
 
 	char TargetName[20];
 	scanf("%s",TargetName);
-	printf("===================================================\n");
-	printf("상대방에게 보낼 명령어를 입력하세요 : ");
-	char buf[20];
-	scanf("%s",buf);
-
-	strcpy(send_packet->Separator,"Command");
-	strcpy(send_packet->MyName,name);
-	strcpy(send_packet->TargetName,TargetName);
-	strcpy(send_packet->buf,buf);
-	write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
-
+	if(strcmp(TargetName,name)==0)
+	{
+		printf("자기 자신한테 귓속말을 보낼 수 없습니다.\n");
+	}
+	else
+	{
+		printf("===================================================\n");
+		printf("상대방에게 보낼 명령어를 입력하세요 : ");
+		char buf[20];
+		scanf("%s",buf);
+		strcpy(send_packet->Separator,"Command");
+		strcpy(send_packet->MyName,name);
+		//printf("when send cmd check name :%s",send_packet->MyName);
+		strcpy(send_packet->TargetName,TargetName);
+		strcpy(send_packet->buf,buf);
+		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
+		printf("명령어 전송이 완료되었습니다.\n");
+	}
+	free(send_packet);
 	return;
 }
 
