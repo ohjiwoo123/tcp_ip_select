@@ -86,7 +86,8 @@ int main(int argc, char *argv[])
 	socklen_t adr_sz;
 	int fd_max, str_len, fd_num, i;
 	char buf[BUF_SIZE];
-	if(argc!=2) {
+	if(argc!=2) 
+	{
 		printf("Usage : %s <port>\n", argv[0]);
 		exit(1);
 	}
@@ -119,7 +120,7 @@ int main(int argc, char *argv[])
 		//timeout.tv_sec=5;
 		//timeout.tv_usec=5000;
 
-		printf("fd_max : %d\n",fd_max);
+		//printf("fd_max : %d\n",fd_max);
 
 		if((fd_num=select(fd_max+1, &cpy_reads, 0, 0, NULL))==-1)
 		{
@@ -221,7 +222,7 @@ void send_List(int sock_num, Packet *p)   // send to all
 	for(int i=0; i<clnt_cnt; i++)
 	{
 		strcat(buf,socket_info_array[i].NickName);
-		strcat(buf,";");
+		strcat(buf,"\n");
 	}
 
 	strcpy(p->Separator,"List");
@@ -357,6 +358,23 @@ void *handle_connection(int sock_num, fd_set *reads)
 				}
 			}
 		}
+		if(clnt_sock == 4)
+		{
+			for(int i=0; i<history_count_C1; i++)
+			{
+				free(history_arr_C1[i]);
+				history_count_C1 = 0;
+			}
+		}
+		else if(clnt_sock == 5)
+		{
+			for(int i=0; i<history_count_C2; i++)
+			{
+				free(history_arr_C2[i]);
+				history_count_C2 = 0;
+			}
+		}
+
 		free(recv_packet);
 		return NULL;
 	}

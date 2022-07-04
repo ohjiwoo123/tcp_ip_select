@@ -17,10 +17,8 @@ void clearInputBuffer();
 void getList(int sock);
 void disConnect(int sock);
 void send_message(int sock);
-void send_cmd(int sock);
 void getHistory();
 void *handle_connection(int sock_num, fd_set *reads);
-
 void *t_PrintUI(void *data);
 //void *send_msg(void *arg);
 void *recv_msg(void *arg);
@@ -29,8 +27,18 @@ char name[NAME_SIZE]="[DEFAULT]";
 char msg[BUF_SIZE];
 pthread_mutex_t mutx;
 
-int history_count = 0;
-char *history_arr[256];
+
+typedef struct 
+{             // 연결 리스트의 노드 구조체
+	char cmd[20];             // 데이터를 저장할 멤버
+    struct NODE *next;    // 다음 노드의 주소를 저장할 포인터
+}NODE;
+
+typedef struct
+{
+	int sock;
+	NODE *node;
+}SockAndNode;
 
 #pragma pack(push,1)
 typedef struct
@@ -53,8 +61,14 @@ typedef struct
 }Packet;
 #pragma pack(pop)
 
+void send_cmd(int sock, NODE *list);
+void appendHistory(NODE *list, char *cmd);
+void showHistory(NODE *list);
+
 int main(int argc, char *argv[])
 {
+	NODE *head = malloc(sizeof(NODE));    // 머리 노드 생성
+                                                        // 머리 노드는 데이터를 저장하지 않음
 	int fd_max, str_len, fd_num, i, sock;
 	char message[BUF_SIZE];
 	struct sockaddr_in serv_adr;
@@ -64,6 +78,8 @@ int main(int argc, char *argv[])
 	pthread_t snd_thread, rcv_thread, printUI_thread;
 	pthread_mutex_init(&mutx, NULL);
 	void * thread_return;
+
+	SockAndNode NodeArg;
 
 	if(argc!=4)
 	{
@@ -109,8 +125,9 @@ int main(int argc, char *argv[])
 		cpy_reads=reads;
 		//timeout.tv_sec=5;
 		//timeout.tv_usec=5000;
-
-		if(pthread_create(&printUI_thread,NULL,t_PrintUI,(void*)&sock) !=0 )
+		NodeArg.sock = sock;
+		NodeArg.node = head;
+		if(pthread_create(&printUI_thread,NULL,t_PrintUI,(void*)&NodeArg) !=0 )
 		{
 			error_handling("PrintUI_Thread create error\n");
 			continue;
@@ -131,6 +148,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	close(sock);
+	free(head);
 	return 0;
 }
 
@@ -205,7 +223,7 @@ void *handle_connection(int sock_num, fd_set *reads)
 			//printf("myname : %s\n",recv_packet->MyName);
 			if(strcmp(recv_packet->MyName,name)==0)
 			{
-				printf("\n%s from : %s\n",recv_packet->buf,recv_packet->TargetName);
+				printf("\n%s from : %s",recv_packet->buf,recv_packet->TargetName);
 			}
 			else
 			{
@@ -228,7 +246,7 @@ void *handle_connection(int sock_num, fd_set *reads)
 
 		else if (strcmp(recv_packet->Separator,"List")==0)
 		{
-			printf("\nClient List : %s\n",recv_packet->buf);
+			printf("\nClient List : \n%s",recv_packet->buf);
 		}
 	}
 	free(recv_packet);
@@ -237,7 +255,10 @@ void *handle_connection(int sock_num, fd_set *reads)
 
 void *t_PrintUI(void *arg)
 {
-	int sock= *((int*)arg);
+	//int sock= *((int*)arg);
+	SockAndNode *data = (SockAndNode*)arg;
+	int sock = data->sock;
+	NODE *head = data -> node;
 	int nMenu = 0;
 
 	pthread_mutex_lock(&mutx);
@@ -252,10 +273,10 @@ void *t_PrintUI(void *arg)
 				send_message(sock);
 				break;
 			case 3:
-				send_cmd(sock);
+				send_cmd(sock,head);
 				break;
 			case 4:
-				getHistory();
+				getHistory(head);
 				break;
 			case 5:
 				disConnect(sock);
@@ -301,29 +322,18 @@ void getList(int sock)
 	char buf[1024];
 	Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
 	memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
-
-	printf("===================================================\n");
-	printf("접속된 유저들을 보려면 List 를 입력하세요\n");
-	scanf("%s",buf);
-
-	if(strcmp(buf,"List")!=0)
-	{
-		printf("접속 유저를 보려면 List 를 정확하게 입력하세요, 처음 화면으로 돌아갑니다\n");
-		free(send_packet);
-		return;
-	}
-
-	strcpy(send_packet->Separator,buf);
 	
+	strcpy(send_packet->Separator,"List");
 	write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
 	free(send_packet);
+ 
 	return;
 }
 
-void getHistory()
+void getHistory(NODE *list)
 {
-	printf("===================================================\n");
-	printf("내가 보낸 명령어 기록을 체크합니다.\n");
+	showHistory(list);
+	//printf("내가 보낸 명령어 기록을 체크합니다.\n");
 	// printf();
 	return;
 }
@@ -331,10 +341,10 @@ void getHistory()
 void disConnect(int sock)
 {
 	printf("서버와의 접속이 종료됩니다.\n");
-	exit(1);
+	exit(0);	// 정상종료 
 	//FD_CLR(sock, &reads);
 	//close(sock);
-	//exit(1);
+	//exit(1);	// 에러메세지 종료 
 }
 
 void send_message(int sock)   // send to all
@@ -402,7 +412,7 @@ void send_message(int sock)   // send to all
 	free(send_packet);
 	return;
 }
-void send_cmd(int sock)   // send to all
+void send_cmd(int sock, NODE *list)   // send to all
 {
 	printf("===================================================\n");
 	printf("명령어 보내기 모드입니다.\n");
@@ -424,6 +434,7 @@ void send_cmd(int sock)   // send to all
 		printf("상대방에게 보낼 명령어를 입력하세요 : ");
 		char buf[20];
 		scanf("%s",buf);
+		appendHistory(list,buf);
 		strcpy(send_packet->Separator,"Command");
 		strcpy(send_packet->MyName,name);
 		//printf("when send cmd check name :%s",send_packet->MyName);
@@ -436,3 +447,37 @@ void send_cmd(int sock)   // send to all
 	return;
 }
 
+void appendHistory(NODE *list, char *cmd)
+{
+	if(list->next == NULL)
+	{
+		NODE *newNode = malloc(sizeof(NODE));
+		strcpy(newNode->cmd,cmd);
+		newNode->next = NULL;
+		list->next = newNode;
+	}
+	else 
+	{
+		NODE *cur = list;
+		while(cur->next != NULL)
+		{
+			cur = cur->next;
+		}
+		NODE *newNode = malloc(sizeof(NODE));
+		strcpy(newNode->cmd,cmd);
+		newNode->next = NULL;
+		cur->next = newNode;
+	}
+}
+
+void showHistory(NODE *list)
+{
+	NODE *cur = list-> next;
+	printf("===================================================\n");
+	printf("내가 보낸 명령어 기록입니다.\n");
+	while(cur != NULL)
+	{
+		printf("%s\n",cur->cmd);
+		cur = cur->next;
+	}
+}
