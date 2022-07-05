@@ -5,11 +5,12 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 #define BUF_SIZE 1024
 #define NAME_SIZE 20
 #define PACKET_SIZE 1102
-#define UserManageMent_SIZE 38
+#define UserManageMent_SIZE 48
 
 int PrintUI();
 void error_handling(char *message);
@@ -17,6 +18,7 @@ void clearInputBuffer();
 void getList(int sock);
 void disConnect(int sock);
 void send_message(int sock);
+bool convertStatus(int sock);
 void getHistory();
 void *handle_connection(int sock_num, fd_set *reads);
 void *t_PrintUI(void *data);
@@ -26,7 +28,7 @@ void *recv_msg(void *arg);
 char name[NAME_SIZE]="[DEFAULT]";
 char msg[BUF_SIZE];
 pthread_mutex_t mutx;
-
+bool statusFlag;
 
 typedef struct 
 {             // 연결 리스트의 노드 구조체
@@ -45,6 +47,7 @@ typedef struct
 {
 	char IP_Address[14];
 	char NickName[20];
+	char UserStatus[10];
 	int Port;
 }UserManageMent;
 #pragma pack(pop)
@@ -107,6 +110,8 @@ int main(int argc, char *argv[])
 	strcpy(user_packet->IP_Address,argv[1]);
 	user_packet->Port = serv_adr.sin_port;
 	strcpy(user_packet->NickName,name);
+	strcpy(user_packet->UserStatus,"Online");
+	statusFlag = true;
 	if(write(sock,(char*)user_packet,sizeof(user_packet)+UserManageMent_SIZE) <= 0)
 	{
 		error_handling("Sending UserInfo Failed!!\n");
@@ -281,6 +286,9 @@ void *t_PrintUI(void *arg)
 			case 5:
 				disConnect(sock);
 				break;
+			case 6:
+				convertStatus(sock);
+				break;
 			default:
 				printf("메뉴의 보기에 있는 숫자 중에서 입력하세요.\n");
 				break;
@@ -295,7 +303,8 @@ int PrintUI()
 	int nInput = 0;
 	// system("cls");
 	printf("\n===================================================\n");
-	printf("[1]유저목록보기\t [2] 메세지보내기\t [3]명령어보내기\t [4]명령어기록보기\t [5]연결종료하기\t\n");
+	printf("[1]유저목록보기\t [2] 메세지보내기\t [3]명령어보내기\n");
+	printf("[4]명령어기록보기\t [5]연결종료하기 [6]OnLine/OffLine 전환\n");
 	printf("===================================================\n");
 	printf("번호를 입력하세요 : ");
 
@@ -304,9 +313,9 @@ int PrintUI()
 	//getchar();
 	//버퍼에 남은 엔터 제거용
 	while (getchar() != '\n'); //scanf_s 버퍼 비우기, 밀림 막음
-	if (nInput > 5 || nInput < 1)
+	if (nInput > 6 || nInput < 1)
 	{
-		nInput = 6; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
+		nInput = 7; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
 	}
 	return nInput;
 }
@@ -334,7 +343,6 @@ void getHistory(NODE *list)
 {
 	showHistory(list);
 	//printf("내가 보낸 명령어 기록을 체크합니다.\n");
-	// printf();
 	return;
 }
 
@@ -480,4 +488,40 @@ void showHistory(NODE *list)
 		printf("%s\n",cur->cmd);
 		cur = cur->next;
 	}
+}
+
+bool convertStatus(int sock)
+{
+	Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
+	memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
+	if (statusFlag == true)
+	{
+		printf("===================================================\n");
+		printf("현재 OnLine 상태입니다. OffLine 상태로 변환합니다.\n");
+		printf("===================================================\n");
+		strcpy(send_packet->buf,"OffLine");
+		strcpy(send_packet->Separator,"Change_Status");
+		strcpy(send_packet->MyName,name);
+		if(write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE)<=0)
+		{
+			error_handling("유저상태 전송 실패\n");
+		}
+		statusFlag = false;
+	}
+	else 
+	{
+		printf("===================================================\n");
+		printf("현재 OffLine 상태입니다. OnLine 상태로 변환합니다.\n");
+		printf("===================================================\n");
+		strcpy(send_packet->buf,"OnLine");
+		strcpy(send_packet->Separator,"Change_Status");
+		strcpy(send_packet->MyName,name);
+		if(write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE)<=0)
+		{
+			error_handling("유저상태 전송 실패\n");
+		}
+		statusFlag = true;
+	}
+	free(send_packet);
+	return statusFlag;
 }

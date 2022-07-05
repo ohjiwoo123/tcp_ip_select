@@ -13,7 +13,7 @@
 #define BUF_SIZE 1024
 #define MAX_CLNT 256
 #define PACKET_SIZE 1102
-#define UserManageMent_SIZE 38
+#define UserManageMent_SIZE 48
 
 /// Thread ///
 void *handle_clnt(void * arg);
@@ -36,6 +36,7 @@ typedef struct
 {
 	char IP_Address[14];
 	char NickName[20];
+	char UserStatus[10];
 	int Port;
 	int sock_Num;
 }socket_info;
@@ -46,6 +47,7 @@ typedef struct
 {
 	char IP_Address[14];
 	char NickName[20];
+	char UserStatus[10];
 	int Port;
 }UserManageMent;
 #pragma pack(pop)
@@ -157,7 +159,7 @@ int main(int argc, char *argv[])
 						error_handling("Reading User_Info Failed\n");
 					}
 					strcpy(socket_info_array[clnt_cnt].NickName,user_packet->NickName);
-
+					strcpy(socket_info_array[clnt_cnt].UserStatus,user_packet->UserStatus);
 					//printf("recv User_Info Success\n");
 					//printf("NickName : %s\n",socket_info_array[clnt_cnt].NickName);
 
@@ -221,7 +223,11 @@ void send_List(int sock_num, Packet *p)   // send to all
 
 	for(int i=0; i<clnt_cnt; i++)
 	{
+		strcat(buf,"닉네임 : ");
 		strcat(buf,socket_info_array[i].NickName);
+		strcat(buf," ");
+		strcat(buf, "온라인 상태여부 : ");
+		strcat(buf,socket_info_array[i].UserStatus);
 		strcat(buf,"\n");
 	}
 
@@ -417,6 +423,20 @@ void *handle_connection(int sock_num, fd_set *reads)
 			send_List(clnt_sock,recv_packet);
 		}
 
+		else if(strcmp(recv_packet->Separator,"Change_Status") == 0)
+		{
+			for (int i=0; i<clnt_cnt; i++)
+			{
+				if(strcmp(socket_info_array[i].NickName,recv_packet->MyName) == 0)
+				{
+					strcpy(socket_info_array[i].UserStatus,recv_packet->buf);
+				}
+				else 
+				{
+					continue;
+				}
+			}
+		}
 		//printf("after read\n");
 	}
 	free(recv_packet);
