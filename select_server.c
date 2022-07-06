@@ -71,8 +71,6 @@ int history_count_C2 = 0;
 char *history_arr_C1[256];
 char *history_arr_C2[256];
 
-char *history_arr[256][256];
-
 void send_msg(int sock_num, Packet *p);
 
 int main(int argc, char *argv[])
@@ -292,8 +290,6 @@ void disConnect()
 	printf("삭제할 소켓 번호를 입력하세요 :\n");
 	scanf("%d",&index);
 	shutdown(index,SHUT_WR);
-	close(index);
-	clnt_cnt--;
 }
 
 void getHistory()
@@ -357,6 +353,8 @@ void *handle_connection(int sock_num, fd_set *reads)
 				else
 				{
 					strcpy(socket_info_array[i].IP_Address,socket_info_array[i+1].IP_Address);
+					strcpy(socket_info_array[i].NickName,socket_info_array[i+1].NickName);
+					strcpy(socket_info_array[i].UserStatus,socket_info_array[i+1].UserStatus);
 					socket_info_array[i].Port = socket_info_array[i+1].Port;
 					socket_info_array[i].sock_Num = socket_info_array[i+1].sock_Num;
 					clnt_cnt--;
