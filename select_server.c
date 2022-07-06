@@ -67,9 +67,21 @@ typedef struct
 
 int history_count_C1 = 0;
 int history_count_C2 = 0;
+int history_count_C3 = 0;
+int history_count_C4 = 0;
+int history_count_C5 = 0;
+int history_count_C6 = 0;
+int history_count_C7 = 0;
+int history_count_C8 = 0;
 
 char *history_arr_C1[256];
 char *history_arr_C2[256];
+char *history_arr_C3[256];
+char *history_arr_C4[256];
+char *history_arr_C5[256];
+char *history_arr_C6[256];
+char *history_arr_C7[256];
+char *history_arr_C8[256];
 
 void send_msg(int sock_num, Packet *p);
 
@@ -278,10 +290,16 @@ int PrintUI()
 
 void getList()
 {
+	if(clnt_cnt==0)
+	{
+		printf("현재 접속한 인원이 없습니다.\n");
+		return;
+	}
 	for(int i=0; i<clnt_cnt; i++)
 	{
-		printf("소켓번호 : %d, IP : %s, Port : %d, 닉네임 : %s\n",socket_info_array[i].sock_Num, socket_info_array[i].IP_Address, socket_info_array[i].Port, socket_info_array[i].NickName);
+		printf("소켓번호 : %d, IP : %s, Port : %d, 닉네임 : %s, 유저상태 : %s\n",socket_info_array[i].sock_Num, socket_info_array[i].IP_Address, socket_info_array[i].Port, socket_info_array[i].NickName, socket_info_array[i].UserStatus);
 	}
+	return;
 }
 
 void disConnect()
@@ -299,6 +317,11 @@ void getHistory()
 	scanf("%d",&index);
 	if(index == 4)
 	{
+		if (history_count_C1 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
 		for (int i=0; i<history_count_C1; i++)
 		{
 			printf("%d번 소켓의 명령어 기록 %d : %s\n",index,i+1,history_arr_C1[i]);
@@ -306,15 +329,93 @@ void getHistory()
 	}
 	else if (index == 5)
 	{
+		if (history_count_C2 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
 		for (int i=0; i<history_count_C2; i++)
 		{
 			printf("%d번 소켓의 명령어 기록 %d : %s\n",index, i+1, history_arr_C2[i]);
+		}
+	}
+	else if (index == 6)
+	{
+		if (history_count_C3 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
+		for (int i=0; i<history_count_C3; i++)
+		{
+			printf("%d번 소켓의 명령어 기록 %d : %s\n",index, i+1, history_arr_C3[i]);
+		}
+	}
+	else if (index == 7)
+	{
+		if (history_count_C4 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
+		for (int i=0; i<history_count_C4; i++)
+		{
+			printf("%d번 소켓의 명령어 기록 %d : %s\n",index, i+1, history_arr_C4[i]);
+		}
+	}
+	else if (index == 8)
+	{
+		if (history_count_C5 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
+		for (int i=0; i<history_count_C5; i++)
+		{
+			printf("%d번 소켓의 명령어 기록 %d : %s\n",index, i+1, history_arr_C5[i]);
+		}
+	}
+	else if (index == 9)
+	{
+		if (history_count_C6 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
+		for (int i=0; i<history_count_C6; i++)
+		{
+			printf("%d번 소켓의 명령어 기록 %d : %s\n",index, i+1, history_arr_C6[i]);
+		}
+	}
+	else if (index == 10)
+	{
+		if (history_count_C7 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
+		for (int i=0; i<history_count_C7; i++)
+		{
+			printf("%d번 소켓의 명령어 기록 %d : %s\n",index, i+1, history_arr_C7[i]);
+		}
+	}
+	else if (index == 11)
+	{
+		if (history_count_C8 == 0)
+		{
+			printf("해당 소켓의 명령어 기록이 없습니다.\n");
+			return;
+		}
+		for (int i=0; i<history_count_C8; i++)
+		{
+			printf("%d번 소켓의 명령어 기록 %d : %s\n",index, i+1, history_arr_C8[i]);
 		}
 	}
 	else
 	{
 		printf("해당번호에 관한 기록이 없습니다.\n");
 	}
+	return;
 }
 
 void *handle_connection(int sock_num, fd_set *reads)
@@ -341,7 +442,7 @@ void *handle_connection(int sock_num, fd_set *reads)
 		FD_CLR(clnt_sock, reads);
 		close(clnt_sock);
 		printf("%d 번 소켓 연결이 종료되었습니다.\n", clnt_sock);
-		for(int i=clnt_cnt-1; i>=0; i--)
+		for(int i=0; i<clnt_cnt; i++)
 		{
 			if(socket_info_array[i].sock_Num == clnt_sock)
 			{
@@ -352,13 +453,15 @@ void *handle_connection(int sock_num, fd_set *reads)
 				}
 				else
 				{
-					strcpy(socket_info_array[i].IP_Address,socket_info_array[i+1].IP_Address);
-					strcpy(socket_info_array[i].NickName,socket_info_array[i+1].NickName);
-					strcpy(socket_info_array[i].UserStatus,socket_info_array[i+1].UserStatus);
-					socket_info_array[i].Port = socket_info_array[i+1].Port;
-					socket_info_array[i].sock_Num = socket_info_array[i+1].sock_Num;
+					for(int j=i; j<clnt_cnt;j++)
+					{
+						strcpy(socket_info_array[j].IP_Address,socket_info_array[j+1].IP_Address);
+						strcpy(socket_info_array[j].NickName,socket_info_array[j+1].NickName);
+						strcpy(socket_info_array[j].UserStatus,socket_info_array[j+1].UserStatus);
+						socket_info_array[j].Port = socket_info_array[j+1].Port;
+						socket_info_array[j].sock_Num = socket_info_array[j+1].sock_Num;
+					}
 					clnt_cnt--;
-					continue;
 				}
 			}
 		}
@@ -378,6 +481,54 @@ void *handle_connection(int sock_num, fd_set *reads)
 				history_count_C2 = 0;
 			}
 		}
+		else if(clnt_sock == 6)
+		{
+			for(int i=0; i<history_count_C3; i++)
+			{
+				free(history_arr_C3[i]);
+				history_count_C3 = 0;
+			}
+		}
+		else if(clnt_sock == 7)
+		{
+			for(int i=0; i<history_count_C4; i++)
+			{
+				free(history_arr_C4[i]);
+				history_count_C4 = 0;
+			}
+		}
+		else if(clnt_sock == 8)
+		{
+			for(int i=0; i<history_count_C5; i++)
+			{
+				free(history_arr_C5[i]);
+				history_count_C5 = 0;
+			}
+		}
+		else if(clnt_sock == 9)
+		{
+			for(int i=0; i<history_count_C6; i++)
+			{
+				free(history_arr_C6[i]);
+				history_count_C6 = 0;
+			}
+		}
+		else if(clnt_sock == 10)
+		{
+			for(int i=0; i<history_count_C7; i++)
+			{
+				free(history_arr_C7[i]);
+				history_count_C7 = 0;
+			}
+		}
+		else if(clnt_sock == 11)
+		{
+			for(int i=0; i<history_count_C8; i++)
+			{
+				free(history_arr_C8[i]);
+				history_count_C8 = 0;
+			}
+		}
 
 		free(recv_packet);
 		return NULL;
@@ -395,10 +546,45 @@ void *handle_connection(int sock_num, fd_set *reads)
 				history_count_C1++;
 			}
 
-			if(clnt_sock == 5)
+			else if(clnt_sock == 5)
 			{
 				history_arr_C2[history_count_C2] = newStrPtr;
 				history_count_C2++;
+			}
+
+			else if(clnt_sock == 6)
+			{
+				history_arr_C3[history_count_C3] = newStrPtr;
+				history_count_C3++;
+			}
+
+			else if(clnt_sock == 7)
+			{
+				history_arr_C4[history_count_C4] = newStrPtr;
+				history_count_C4++;
+			}
+
+			else if(clnt_sock == 8)
+			{
+				history_arr_C5[history_count_C5] = newStrPtr;
+				history_count_C5++;
+			}
+
+			else if(clnt_sock == 9)
+			{
+				history_arr_C6[history_count_C6] = newStrPtr;
+				history_count_C6++;
+			}
+
+			else if(clnt_sock == 10)
+			{
+				history_arr_C7[history_count_C7] = newStrPtr;
+				history_count_C7++;
+			}
+			else if(clnt_sock == 11)
+			{
+				history_arr_C8[history_count_C8] = newStrPtr;
+				history_count_C8++;
 			}
 			send_msg(clnt_sock,recv_packet);
 		}
