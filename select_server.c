@@ -12,8 +12,6 @@
 // 100 -> 1024
 #define BUF_SIZE 1024
 #define MAX_CLNT 256
-#define PACKET_SIZE 1102
-#define UserManageMent_SIZE 48
 
 /// Thread ///
 void *handle_clnt(void * arg);
@@ -34,7 +32,7 @@ pthread_mutex_t mutx;
 
 typedef struct
 {
-	char IP_Address[14];
+	char IP_Address[16];
 	char NickName[20];
 	char UserStatus[10];
 	int Port;
@@ -45,7 +43,7 @@ socket_info socket_info_array[256];
 #pragma pack(push,1)
 typedef struct
 {
-	char IP_Address[14];
+	char IP_Address[16];
 	char NickName[20];
 	char UserStatus[10];
 	int Port;
@@ -55,7 +53,7 @@ typedef struct
 #pragma pack(push,1)
 typedef struct
 {
-	char IP_Address[14];
+	char IP_Address[16];
 	int Port;
 	char Separator[20];	// “Command”, “Print_Result”, “DisConnect”
 	char MyName[20];
@@ -162,9 +160,9 @@ int main(int argc, char *argv[])
 					printf("connected client: %d \n", clnt_sock);
 
 					// accept 이후 유저 아이피, 포트, 닉네임 읽어오기 
-					UserManageMent *user_packet = malloc(sizeof(user_packet)+UserManageMent_SIZE);
-					memset(user_packet,0,sizeof(user_packet)+UserManageMent_SIZE);
-					if(read(clnt_sock,(char*)user_packet,sizeof(user_packet)+UserManageMent_SIZE)<=0)
+					UserManageMent *user_packet = malloc(sizeof(UserManageMent));
+					memset(user_packet,0,sizeof(UserManageMent));
+					if(read(clnt_sock,(char*)user_packet,sizeof(UserManageMent))<=0)
 					{
 						error_handling("Reading User_Info Failed\n");
 					}
@@ -223,7 +221,7 @@ void send_List(int sock_num, Packet *p)   // send to all
 {
 	char buf[1024];
 	memset(buf,0,sizeof(buf));
-	memset(p,0,sizeof(p)+PACKET_SIZE);
+	memset(p,0,sizeof(Packet));
 	int clnt_sock = sock_num; 
 
 	for(int i=0; i<clnt_cnt; i++)
@@ -239,7 +237,7 @@ void send_List(int sock_num, Packet *p)   // send to all
 	strcpy(p->Separator,"List");
 	strcpy(p->buf, buf);
 
-	if(write(clnt_sock, (char*)p,sizeof(p)+PACKET_SIZE)<=0)
+	if(write(clnt_sock, (char*)p,sizeof(Packet))<=0)
 	{
 		error_handling("Sending List Error\n");
 	}
@@ -250,7 +248,7 @@ void send_msg(int sock_num, Packet *p)   // send to all
 	int clnt_sock = sock_num; 
 	for(int i=0; i<clnt_cnt; i++)
 	{
-		if(write(socket_info_array[i].sock_Num, (char*)p,sizeof(p)+PACKET_SIZE)<=0)
+		if(write(socket_info_array[i].sock_Num, (char*)p,sizeof(Packet))<=0)
 		{
 			error_handling("send error\n");
 		}
@@ -415,15 +413,15 @@ void *handle_connection(int sock_num, fd_set *reads)
 	int str_len=0, i;
 	char msg[BUF_SIZE];
 
-	Packet *recv_packet = malloc(sizeof(recv_packet)+PACKET_SIZE);
+	Packet *recv_packet = malloc(sizeof(Packet));
 	if (recv_packet == NULL)
 	{
 		error_handling("recv_packet Pointer is NULL\n");
 		return (void*)-1;
 	}
-	memset(recv_packet,0,sizeof(recv_packet)+PACKET_SIZE);
+	memset(recv_packet,0,sizeof(Packet));
 
-	str_len=read(clnt_sock, (char*)recv_packet, sizeof(recv_packet)+PACKET_SIZE);
+	str_len=read(clnt_sock, (char*)recv_packet, sizeof(Packet));
 	if(str_len == 0)    // close request!
 	{
 		printf("Close Request\n");
@@ -575,6 +573,17 @@ void *handle_connection(int sock_num, fd_set *reads)
 				history_arr_C8[history_count_C8] = newStrPtr;
 				history_count_C8++;
 			}
+			for(int i=0; i<clnt_cnt;i++)
+			{
+				if(strcmp(socket_info_array[i].NickName,recv_packet->TargetName) == 0)
+				{
+					send_msg(clnt_sock,recv_packet);
+					free(recv_packet);
+					return NULL;
+				}
+			}
+			strcpy(recv_packet->Separator,"Error");
+			strcpy(recv_packet->buf,"현재 해당 닉네임의 클라이언트는 접속되어 있지 않습니다.(명령어전송불가)");
 			send_msg(clnt_sock,recv_packet);
 		}
 
@@ -585,6 +594,17 @@ void *handle_connection(int sock_num, fd_set *reads)
 
 		else if(strcmp(recv_packet->Separator,"Message") == 0)
 		{
+			for(int i=0; i<clnt_cnt;i++)
+			{
+				if(strcmp(socket_info_array[i].NickName,recv_packet->TargetName) == 0)
+				{
+					send_msg(clnt_sock,recv_packet);
+					free(recv_packet);
+					return NULL;
+				}
+			}
+			strcpy(recv_packet->Separator,"Error");
+			strcpy(recv_packet->buf,"현재 해당 닉네임의 클라이언트는 접속되어 있지 않습니다.(메세지전송불가)");
 			send_msg(clnt_sock,recv_packet);
 		}
 

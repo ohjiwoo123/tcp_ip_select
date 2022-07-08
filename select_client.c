@@ -9,8 +9,6 @@
 
 #define BUF_SIZE 1024
 #define NAME_SIZE 20
-#define PACKET_SIZE 1102
-#define UserManageMent_SIZE 48
 
 int PrintUI();
 void error_handling(char *message);
@@ -44,7 +42,7 @@ typedef struct
 #pragma pack(push,1)
 typedef struct
 {
-	char IP_Address[14];
+	char IP_Address[16];
 	char NickName[20];
 	char UserStatus[10];
 	int Port;
@@ -54,7 +52,7 @@ typedef struct
 #pragma pack(push,1)
 typedef struct
 {
-	char IP_Address[14];
+	char IP_Address[16];
 	int Port;
 	char Separator[20];	// “Command”, “Print_Result”, “DisConnect”
 	char MyName[20];
@@ -100,7 +98,7 @@ int main(int argc, char *argv[])
 	head = loadHistory(head);
 	sock=socket(PF_INET, SOCK_STREAM, 0);   
 	if(sock==-1)
-		error_handling("socket() error");
+		error_handling("socket() error\n");
 	
 	memset(&serv_adr, 0, sizeof(serv_adr));
 	serv_adr.sin_family=AF_INET;
@@ -108,18 +106,18 @@ int main(int argc, char *argv[])
 	serv_adr.sin_port=htons(atoi(argv[2]));
 	
 	if(connect(sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr))==-1)
-		error_handling("connect() error!");
+		error_handling("connect() error!\n");
 	else
 		puts("Connected...........");
 
-	UserManageMent *user_packet = malloc(sizeof(user_packet)+UserManageMent_SIZE);
-	memset(user_packet,0,sizeof(user_packet)+UserManageMent_SIZE);
-	strcpy(user_packet->IP_Address,argv[1]);
+	UserManageMent *user_packet = malloc(sizeof(UserManageMent));
+	memset(user_packet,0,sizeof(UserManageMent));
+	strcpy(user_packet->IP_Address, argv[1]);
 	user_packet->Port = serv_adr.sin_port;
 	strcpy(user_packet->NickName,name);
 	strcpy(user_packet->UserStatus,"Online");
 	statusFlag = true;
-	if(write(sock,(char*)user_packet,sizeof(user_packet)+UserManageMent_SIZE) <= 0)
+	if(write(sock,(char*)user_packet,sizeof(UserManageMent)) <= 0)
 	{
 		error_handling("Sending UserInfo Failed!!\n");
 	}
@@ -177,10 +175,10 @@ void *handle_connection(int sock_num, fd_set *reads)
 	char name_msg[BUF_SIZE];
 	int str_len = 0;
 
-	Packet *recv_packet = malloc(sizeof(recv_packet)+PACKET_SIZE);
-	memset(recv_packet,0,sizeof(recv_packet)+PACKET_SIZE);
+	Packet *recv_packet = malloc(sizeof(Packet));
+	memset(recv_packet,0,sizeof(Packet));
 	// 구조체 정보 먼저 받기, 커맨드인지 출력물인지 
-	str_len = read(sock,(char*)recv_packet,sizeof(recv_packet)+PACKET_SIZE);
+	str_len = read(sock,(char*)recv_packet,sizeof(Packet));
 	if(str_len == 0)
 	{
 		FD_CLR(sock, reads);
@@ -204,13 +202,13 @@ void *handle_connection(int sock_num, fd_set *reads)
 				while(fgets(recv_packet->buf,BUF_SIZE,fp))
 				{
 					//printf("\ninsideof command fgets func\n");
-					Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
-					memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
+					Packet *send_packet = malloc(sizeof(Packet));
+					memset(send_packet,0,sizeof(Packet));
 					strcpy(send_packet->Separator,"Print_Result");
 					strcpy(send_packet->buf,recv_packet->buf);
 					strcpy(send_packet->TargetName,recv_packet->TargetName);
 					strcpy(send_packet->MyName,recv_packet->MyName);
-					if(write(sock,(char*)send_packet,sizeof(send_packet)+PACKET_SIZE) <= 0)
+					if(write(sock,(char*)send_packet,sizeof(Packet)) <= 0)
 					{
 						close(sock);
 						break;
@@ -257,6 +255,14 @@ void *handle_connection(int sock_num, fd_set *reads)
 		else if (strcmp(recv_packet->Separator,"List")==0)
 		{
 			printf("\nClient List : \n%s",recv_packet->buf);
+		}
+
+		else if (strcmp(recv_packet->Separator,"Error")==0)
+		{
+			if(strcmp(recv_packet->MyName,name)==0)
+			{
+				printf("\n %s <- %s \n",recv_packet->TargetName,recv_packet->buf);
+			}
 		}
 	}
 	free(recv_packet);
@@ -334,11 +340,11 @@ void clearInputBuffer()
 void getList(int sock)
 {
 	char buf[1024];
-	Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
-	memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
+	Packet *send_packet = malloc(sizeof(Packet));
+	memset(send_packet,0,sizeof(Packet));
 	
 	strcpy(send_packet->Separator,"List");
-	write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
+	write(sock, (char*)send_packet,sizeof(Packet));
 	free(send_packet);
  
 	return;
@@ -362,8 +368,8 @@ void disConnect(int sock, NODE *list)
 void send_message(int sock)   // send to all
 {
 	int clnt_sock = sock;
-	Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
-	memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
+	Packet *send_packet = malloc(sizeof(Packet));
+	memset(send_packet,0,sizeof(Packet));
 	char name_msg[BUF_SIZE];
 	printf("===================================================\n");
 	printf("[1] 전체보내기\t [2] 귓속말보내기\t [3] 처음 화면으로 돌아가기\t\n");
@@ -385,8 +391,11 @@ void send_message(int sock)   // send to all
 		fgets(name_msg,BUF_SIZE,stdin);
 		strcpy(send_packet->TargetName,"ALL");
 		strcpy(send_packet->buf,name_msg);
-		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
-		//printf("Write_Success\n");
+		if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
+		{
+				error_handling("전체 메세지 전송실패\n");
+		}
+		printf("전체 메세지 보내기 전송 완료\n");
 	}
 	else if (index == 2)
 	{
@@ -406,7 +415,11 @@ void send_message(int sock)   // send to all
 			printf("귓속말 보낼 내용을 입력하세요\n");
 			fgets(name_msg,BUF_SIZE,stdin);
 			strcpy(send_packet->buf,name_msg);
-			write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
+			if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
+			{
+				error_handling("귓속말 전송실패\n");
+			}
+			printf("유저상태 전송 완료\n");
 		}
 	}
 	else if (index == 3)
@@ -430,8 +443,8 @@ void send_cmd(int sock, NODE *list)   // send to all
 	printf("===================================================\n");
 	printf("명령어를 보낼 타겟 클라이언트 닉네임을 입력하세요 : ");
 
-	Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
-	memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
+	Packet *send_packet = malloc(sizeof(Packet));
+	memset(send_packet,0,sizeof(Packet));
 
 	char TargetName[20];
 	scanf("%s",TargetName);
@@ -451,7 +464,7 @@ void send_cmd(int sock, NODE *list)   // send to all
 		//printf("when send cmd check name :%s",send_packet->MyName);
 		strcpy(send_packet->TargetName,TargetName);
 		strcpy(send_packet->buf,buf);
-		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
+		write(sock, (char*)send_packet,sizeof(Packet));
 		printf("명령어 전송이 완료되었습니다.\n");
 	}
 	history_Count++;
@@ -631,8 +644,8 @@ void freeHistory(NODE *list)
 
 bool convertStatus(int sock)
 {
-	Packet *send_packet = malloc(sizeof(send_packet)+PACKET_SIZE);
-	memset(send_packet,0,sizeof(send_packet)+PACKET_SIZE);
+	Packet *send_packet = malloc(sizeof(Packet));
+	memset(send_packet,0,sizeof(Packet));
 	if (statusFlag == true)
 	{
 		printf("===================================================\n");
@@ -641,11 +654,12 @@ bool convertStatus(int sock)
 		strcpy(send_packet->buf,"OffLine");
 		strcpy(send_packet->Separator,"Change_Status");
 		strcpy(send_packet->MyName,name);
-		if(write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE)<=0)
+		if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
 		{
 			error_handling("유저상태 전송 실패\n");
 			exit(0);
 		}
+		printf("유저상태 전송 완료\n");
 		statusFlag = false;
 	}
 	else 
@@ -656,11 +670,12 @@ bool convertStatus(int sock)
 		strcpy(send_packet->buf,"OnLine");
 		strcpy(send_packet->Separator,"Change_Status");
 		strcpy(send_packet->MyName,name);
-		if(write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE)<=0)
+		if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
 		{
 			error_handling("유저상태 전송 실패\n");
 			exit(0);
 		}
+		printf("유저상태 전송 완료\n");
 		statusFlag = true;
 	}
 	free(send_packet);
