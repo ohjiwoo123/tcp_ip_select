@@ -170,8 +170,6 @@ int main(int argc, char *argv[])
 					}
 					strcpy(socket_info_array[clnt_cnt].NickName,user_packet->NickName);
 					strcpy(socket_info_array[clnt_cnt].UserStatus,user_packet->UserStatus);
-					//printf("recv User_Info Success\n");
-					//printf("NickName : %s\n",socket_info_array[clnt_cnt].NickName);
 
 					free(user_packet);
 					clnt_cnt++;
@@ -183,9 +181,7 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
-		//printf("Check end of whil	e\n");
 	}
-	//printf("Check\n");
 	close(serv_sock);
 	return 0;
 }
@@ -228,7 +224,6 @@ void send_List(int sock_num, Packet *p)   // send to all
 	char buf[1024];
 	memset(buf,0,sizeof(buf));
 	memset(p,0,sizeof(p)+PACKET_SIZE);
-	//printf("send List\n");
 	int clnt_sock = sock_num; 
 
 	for(int i=0; i<clnt_cnt; i++)
@@ -248,14 +243,11 @@ void send_List(int sock_num, Packet *p)   // send to all
 	{
 		error_handling("Sending List Error\n");
 	}
-	//printf("send List Success\n");
 }
 
 void send_msg(int sock_num, Packet *p)   // send to all
 {
-	//printf("send\n");
 	int clnt_sock = sock_num; 
-	//printf("sendmsg buf : %s",p->buf);
 	for(int i=0; i<clnt_cnt; i++)
 	{
 		if(write(socket_info_array[i].sock_Num, (char*)p,sizeof(p)+PACKET_SIZE)<=0)
@@ -263,7 +255,6 @@ void send_msg(int sock_num, Packet *p)   // send to all
 			error_handling("send error\n");
 		}
 	}
-	//printf("send msg Success\n");
 }
 
 int PrintUI()
@@ -421,7 +412,6 @@ void getHistory()
 void *handle_connection(int sock_num, fd_set *reads)
 {
 	int clnt_sock= sock_num;
-	//printf("hi iam handle thread %d\n",clnt_sock);
 	int str_len=0, i;
 	char msg[BUF_SIZE];
 
@@ -437,8 +427,6 @@ void *handle_connection(int sock_num, fd_set *reads)
 	if(str_len == 0)    // close request!
 	{
 		printf("Close Request\n");
-		//printf("str_len check\n");
-		//printf("clnt_cnt :%d\n",clnt_cnt);
 		FD_CLR(clnt_sock, reads);
 		close(clnt_sock);
 		printf("%d 번 소켓 연결이 종료되었습니다.\n", clnt_sock);
@@ -530,6 +518,7 @@ void *handle_connection(int sock_num, fd_set *reads)
 			}
 		}
 
+
 		free(recv_packet);
 		return NULL;
 	}
@@ -591,19 +580,16 @@ void *handle_connection(int sock_num, fd_set *reads)
 
 		else if(strcmp(recv_packet->Separator,"Print_Result") == 0)
 		{
-			//printf("Print Result:%s\n",recv_packet->buf);
 			send_msg(clnt_sock,recv_packet);
 		}
 
 		else if(strcmp(recv_packet->Separator,"Message") == 0)
 		{
-			//printf("Server Recv Message : %s\n",recv_packet->buf);
 			send_msg(clnt_sock,recv_packet);
 		}
 
 		else if(strcmp(recv_packet->Separator,"List") == 0)
 		{
-			//printf("Server Accepts List Request : %s\n",recv_packet->Separator);
 			send_List(clnt_sock,recv_packet);
 		}
 
@@ -621,10 +607,8 @@ void *handle_connection(int sock_num, fd_set *reads)
 				}
 			}
 		}
-		//printf("after read\n");
 	}
 	free(recv_packet);
-	//printf("end of handle func\n");
 	return NULL;
 }
 

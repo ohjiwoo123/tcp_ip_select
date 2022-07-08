@@ -16,22 +16,21 @@ int PrintUI();
 void error_handling(char *message);
 void clearInputBuffer();
 void getList(int sock);
-void disConnect(int sock);
 void send_message(int sock);
 bool convertStatus(int sock);
-void getHistory();
 void *handle_connection(int sock_num, fd_set *reads);
 void *t_PrintUI(void *data);
-//void *send_msg(void *arg);
 void *recv_msg(void *arg);
 
 char name[NAME_SIZE]="[DEFAULT]";
 char msg[BUF_SIZE];
 pthread_mutex_t mutx;
 bool statusFlag;
+int history_Count = 0;
 
+// 명령어 기록 유지를 위한 NODE 구조체 (링크드리스트)
 typedef struct 
-{             // 연결 리스트의 노드 구조체
+{							  // 연결 리스트의 노드 구조체
 	char cmd[20];             // 데이터를 저장할 멤버
     struct NODE *next;    // 다음 노드의 주소를 저장할 포인터
 }NODE;
@@ -64,14 +63,19 @@ typedef struct
 }Packet;
 #pragma pack(pop)
 
+void disConnect(int sock, NODE *list);
 void send_cmd(int sock, NODE *list);
 void appendHistory(NODE *list, char *cmd);
 void showHistory(NODE *list);
+NODE* loadHistory(NODE *list);
+void saveHistory(NODE *list);
+void freeHistory(NODE *list);
+void getHistory(NODE *list);
 
 int main(int argc, char *argv[])
 {
 	NODE *head = malloc(sizeof(NODE));    // 머리 노드 생성
-                                                        // 머리 노드는 데이터를 저장하지 않음
+                                          // 머리 노드는 데이터를 저장하지 않음
 	int fd_max, str_len, fd_num, i, sock;
 	char message[BUF_SIZE];
 	struct sockaddr_in serv_adr;
@@ -91,6 +95,9 @@ int main(int argc, char *argv[])
 	}
 	
 	sprintf(name, "%s", argv[3]);
+
+	// 처음에 명령어 기록 파일을 Load 해온다.
+	head = loadHistory(head);
 	sock=socket(PF_INET, SOCK_STREAM, 0);   
 	if(sock==-1)
 		error_handling("socket() error");
@@ -116,8 +123,8 @@ int main(int argc, char *argv[])
 	{
 		error_handling("Sending UserInfo Failed!!\n");
 	}
-	printf("send UserInfo Success\n");
-	printf("sock_num : %d\n",sock);
+	//printf("send UserInfo Success\n");
+	//printf("sock_num : %d\n",sock);
 	free(user_packet);
 
 	FD_ZERO(&reads);
@@ -161,7 +168,7 @@ void error_handling(char *message)
 {
 	fputs(message, stderr);
 	fputc('\n', stderr);
-	exit(1);
+	//exit(1);
 }
 
 void *handle_connection(int sock_num, fd_set *reads)
@@ -170,14 +177,12 @@ void *handle_connection(int sock_num, fd_set *reads)
 	char name_msg[BUF_SIZE];
 	int str_len = 0;
 
-	//printf("client readstart!!\n");
 	Packet *recv_packet = malloc(sizeof(recv_packet)+PACKET_SIZE);
 	memset(recv_packet,0,sizeof(recv_packet)+PACKET_SIZE);
 	// 구조체 정보 먼저 받기, 커맨드인지 출력물인지 
 	str_len = read(sock,(char*)recv_packet,sizeof(recv_packet)+PACKET_SIZE);
 	if(str_len == 0)
 	{
-		//error_handling("read byte == 0\n");
 		FD_CLR(sock, reads);
 		close(sock);
 		printf("\nclosed client: %d \n",sock);
@@ -284,7 +289,7 @@ void *t_PrintUI(void *arg)
 				getHistory(head);
 				break;
 			case 5:
-				disConnect(sock);
+				disConnect(sock, head);
 				break;
 			case 6:
 				convertStatus(sock);
@@ -342,17 +347,16 @@ void getList(int sock)
 void getHistory(NODE *list)
 {
 	showHistory(list);
-	//printf("내가 보낸 명령어 기록을 체크합니다.\n");
 	return;
 }
 
-void disConnect(int sock)
+void disConnect(int sock, NODE *list)
 {
-	printf("서버와의 접속이 종료됩니다.\n");
+	printf("\n서버와의 접속이 종료됩니다.\n");
+	saveHistory(list);
+	freeHistory(list);
+	history_Count = 0;
 	exit(0);	// 정상종료 
-	//FD_CLR(sock, &reads);
-	//close(sock);
-	//exit(1);	// 에러메세지 종료 
 }
 
 void send_message(int sock)   // send to all
@@ -373,7 +377,6 @@ void send_message(int sock)   // send to all
 
 	if (index == 1)
 	{
-		// 나 자신 제외..?
 		printf("===================================================\n");
 		printf("전체 보내기 모드입니다.\n");
 		printf("===================================================\n");
@@ -451,6 +454,7 @@ void send_cmd(int sock, NODE *list)   // send to all
 		write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE);
 		printf("명령어 전송이 완료되었습니다.\n");
 	}
+	history_Count++;
 	free(send_packet);
 	return;
 }
@@ -476,18 +480,153 @@ void appendHistory(NODE *list, char *cmd)
 		newNode->next = NULL;
 		cur->next = newNode;
 	}
+	return;
 }
 
 void showHistory(NODE *list)
 {
-	NODE *cur = list-> next;
-	printf("===================================================\n");
-	printf("내가 보낸 명령어 기록입니다.\n");
-	while(cur != NULL)
+	if(list->next != NULL)
 	{
-		printf("%s\n",cur->cmd);
-		cur = cur->next;
+		int cnt = 1;
+		NODE *cur = list->next;
+		printf("===================================================\n");
+		printf("내가 보낸 명령어 기록입니다.\n");
+		while(cur != NULL)
+		{
+			printf("%d : %s\n",cnt,cur->cmd);
+			cur = cur->next;
+			cnt++;
+		}
 	}
+	else
+	{
+		printf("고객님의 명령어 기록이 0입니다.\n");
+		return;
+	}
+}
+
+void saveHistory(NODE *list)
+{
+	int str_len=0;
+	char cmd[20];
+	char FilePath[30];
+
+	FILE *fp;
+	strcpy(cmd,"pwd");
+	fp = popen(cmd,"r");
+	if(fp == NULL)
+	{
+		perror("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
+		return (void*)-1;
+	}
+	fgets(FilePath,30,fp);
+	pclose(fp);
+
+	str_len = strlen(FilePath);
+	FilePath[str_len-1] = '/';
+
+	FILE* stream;
+	NODE* pHead = list;
+	strcat(FilePath,name);
+	strcat(FilePath,".dat");
+	//printf("FilePath : %s\n",FilePath);
+
+	stream = fopen(FilePath, "wb");
+	if (stream == NULL) 
+	{
+		error_handling("파일 스트림 생성 실패\n");
+		return;
+	}
+	fwrite(&history_Count, sizeof(history_Count), 1, stream);
+	if(pHead!=NULL)
+	{
+		pHead = pHead->next;
+		while (pHead != NULL) 
+		{
+			//printf("저장부분 명령어 : %s, 주소 : %p",pHead->cmd, pHead->next);
+			fwrite(pHead, sizeof(NODE), 1, stream);
+			pHead = pHead->next;
+		}
+	}
+	fclose(stream);
+}
+
+NODE* loadHistory(NODE *list)
+{
+	int str_len=0;
+	char cmd[20];
+	char FilePath[30];
+
+	FILE *fp;
+	strcpy(cmd,"pwd");
+	fp = popen(cmd,"r");
+	if(fp == NULL)
+	{
+		perror("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
+		return (void*)-1;
+	}
+	fgets(FilePath,30,fp);
+	pclose(fp);
+
+	str_len = strlen(FilePath);
+	FilePath[str_len-1] = '/';
+
+	strcat(FilePath,name);
+	strcat(FilePath,".dat");
+
+	//printf("FilePath : %s\n",FilePath);
+	FILE* stream;
+	NODE* pHead = malloc(sizeof(NODE));;
+	NODE* pLast = NULL;
+
+	stream = fopen(FilePath, "rb");
+	if (stream == NULL) 
+	{
+		error_handling("현재 닉네임 이전 명령어기록 파일 없음.\n");
+		return list;
+	}
+	fread(&history_Count, sizeof(history_Count), 1, stream);
+	if (history_Count == 0) 
+	{
+		error_handling("이전 같은 닉네임의 명령어 송신 기록은 0입니다.\n");
+		return list;
+	}
+	printf("현재 닉네임으로 저장 된 명령어 기록 수는 %d개 입니다.\n\n", history_Count);
+
+	for (int i = 0; i < history_Count; i++) 
+	{
+		if(pHead->next == NULL)
+		{
+			NODE *newNode = malloc(sizeof(NODE));
+			pHead->next = newNode;
+			pLast = newNode;
+			fread(newNode, sizeof(NODE), 1, stream);
+			strcpy(pLast->cmd,newNode->cmd);
+			pLast->next = NULL;
+		}
+		else 
+		{
+			NODE *newNode = malloc(sizeof(NODE));
+			pLast->next = newNode;
+			pLast = pLast->next;
+			fread(newNode, sizeof(NODE), 1, stream);
+			strcpy(pLast->cmd,newNode->cmd);
+			pLast->next = NULL;
+		}
+	}
+	fclose(stream);
+	return pHead;
+}
+
+void freeHistory(NODE *list)
+{
+	while (list != NULL) 
+	{
+		NODE* cur = list;
+		list = cur->next;
+		free(cur);
+	}
+	return;
 }
 
 bool convertStatus(int sock)
@@ -505,6 +644,7 @@ bool convertStatus(int sock)
 		if(write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE)<=0)
 		{
 			error_handling("유저상태 전송 실패\n");
+			exit(0);
 		}
 		statusFlag = false;
 	}
@@ -519,6 +659,7 @@ bool convertStatus(int sock)
 		if(write(sock, (char*)send_packet,sizeof(send_packet)+PACKET_SIZE)<=0)
 		{
 			error_handling("유저상태 전송 실패\n");
+			exit(0);
 		}
 		statusFlag = true;
 	}
