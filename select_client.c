@@ -10,81 +10,57 @@
 #define BUF_SIZE 1024
 #define NAME_SIZE 20
 
-int PrintUI();
-void error_handling(char *message);
-void clearInputBuffer();
-void getList(int sock);
-void send_message(int sock);
-bool convertStatus(int sock);
-void *handle_connection(int sock_num, fd_set *reads);
-void *t_PrintUI(void *data);
-void *recv_msg(void *arg);
+
+#pragma pack(push,1)
+typedef struct
+{
+	char ip_Address[16];
+	char nickName[20];
+	char user_Status[10];
+	int port;
+}user_ManageMent;
+#pragma pack(pop)
+
+#pragma pack(push,1)
+typedef struct
+{
+	char ip_Address[16];
+	int port;
+	char separator[20];	// “Command”, “Print_Result”, “DisConnect”
+	char my_Name[20];
+	char target_Name[20];
+	char buf[1024];
+}packet;
+#pragma pack(pop)
+
+void disConnect(int sock);
+void send_Cmd(int sock);
+int print_Ui();
+void error_Handling(char *message);
+void clear_Input_Buffer();
+void get_List(int sock);
+void get_History(int sock);
+void send_Message(int sock);
+bool convert_Status(int sock);
+void *handle_Connection(int sock, fd_set *reads);
+void *t_Print_Ui(void *data);
 
 char name[NAME_SIZE]="[DEFAULT]";
 char msg[BUF_SIZE];
 pthread_mutex_t mutx;
-bool statusFlag;
-int history_Count = 0;
-
-// 명령어 기록 유지를 위한 NODE 구조체 (링크드리스트)
-typedef struct 
-{							  // 연결 리스트의 노드 구조체
-	char cmd[20];             // 데이터를 저장할 멤버
-    struct NODE *next;    // 다음 노드의 주소를 저장할 포인터
-}NODE;
-
-typedef struct
-{
-	int sock;
-	NODE *node;
-}SockAndNode;
-
-#pragma pack(push,1)
-typedef struct
-{
-	char IP_Address[16];
-	char NickName[20];
-	char UserStatus[10];
-	int Port;
-}UserManageMent;
-#pragma pack(pop)
-
-#pragma pack(push,1)
-typedef struct
-{
-	char IP_Address[16];
-	int Port;
-	char Separator[20];	// “Command”, “Print_Result”, “DisConnect”
-	char MyName[20];
-	char TargetName[20];
-	char buf[1024];
-}Packet;
-#pragma pack(pop)
-
-void disConnect(int sock, NODE *list);
-void send_cmd(int sock, NODE *list);
-void appendHistory(NODE *list, char *cmd);
-void showHistory(NODE *list);
-NODE* loadHistory(NODE *list);
-void saveHistory(NODE *list);
-void freeHistory(NODE *list);
-void getHistory(NODE *list);
+bool status_Flag;
 
 int main(int argc, char *argv[])
 {
-	NODE *head = malloc(sizeof(NODE));    // 머리 노드 생성
-                                          // 머리 노드는 데이터를 저장하지 않음
-	int fd_max, str_len, fd_num, i, sock;
+	int fd_Max, str_Len, fd_Num, i, sock;
+
 	char message[BUF_SIZE];
-	struct sockaddr_in serv_adr;
+	struct sockaddr_in serv_Adr;
 	struct timeval timeout;
-	fd_set reads, cpy_reads;
+	fd_set reads, cpy_Reads;
 
-	pthread_t snd_thread, rcv_thread, printUI_thread;
+	pthread_t print_Ui_Thread;
 	pthread_mutex_init(&mutx, NULL);
-	void * thread_return;
-
-	SockAndNode NodeArg;
 
 	if(argc!=4)
 	{
@@ -94,92 +70,87 @@ int main(int argc, char *argv[])
 	
 	sprintf(name, "%s", argv[3]);
 
-	// 처음에 명령어 기록 파일을 Load 해온다.
-	head = loadHistory(head);
 	sock=socket(PF_INET, SOCK_STREAM, 0);   
 	if(sock==-1)
-		error_handling("socket() error\n");
+		error_Handling("socket() error\n");
 	
-	memset(&serv_adr, 0, sizeof(serv_adr));
-	serv_adr.sin_family=AF_INET;
-	serv_adr.sin_addr.s_addr=inet_addr(argv[1]);
-	serv_adr.sin_port=htons(atoi(argv[2]));
+	memset(&serv_Adr, 0, sizeof(serv_Adr));
+	serv_Adr.sin_family=AF_INET;
+	serv_Adr.sin_addr.s_addr=inet_addr(argv[1]);
+	serv_Adr.sin_port=htons(atoi(argv[2]));
 	
-	if(connect(sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr))==-1)
-		error_handling("connect() error!\n");
+	if(connect(sock, (struct sockaddr*)&serv_Adr, sizeof(serv_Adr))==-1)
+		error_Handling("connect() error!\n");
 	else
 		puts("Connected...........");
 
-	UserManageMent *user_packet = malloc(sizeof(UserManageMent));
-	memset(user_packet,0,sizeof(UserManageMent));
-	strcpy(user_packet->IP_Address, argv[1]);
-	user_packet->Port = serv_adr.sin_port;
-	strcpy(user_packet->NickName,name);
-	strcpy(user_packet->UserStatus,"Online");
-	statusFlag = true;
-	if(write(sock,(char*)user_packet,sizeof(UserManageMent)) <= 0)
+	user_ManageMent *user_Packet = malloc(sizeof(user_ManageMent));
+	memset(user_Packet,0,sizeof(user_ManageMent));
+	strcpy(user_Packet->ip_Address, argv[1]);
+	user_Packet->port = serv_Adr.sin_port;
+	strcpy(user_Packet->nickName,name);
+	strcpy(user_Packet->user_Status,"Online");
+	status_Flag = true;
+	if(write(sock,(char*)user_Packet,sizeof(user_ManageMent)) <= 0)
 	{
-		error_handling("Sending UserInfo Failed!!\n");
+		error_Handling("Sending UserInfo Failed!!\n");
 	}
 	//printf("send UserInfo Success\n");
 	//printf("sock_num : %d\n",sock);
-	free(user_packet);
+	free(user_Packet);
 
 	FD_ZERO(&reads);
 	FD_SET(0, &reads);
 	FD_SET(sock, &reads);
-	fd_max=sock;
+	fd_Max=sock;
 
 	while(1) 
 	{
-		cpy_reads=reads;
+		cpy_Reads=reads;
 		//timeout.tv_sec=5;
 		//timeout.tv_usec=5000;
-		NodeArg.sock = sock;
-		NodeArg.node = head;
-		if(pthread_create(&printUI_thread,NULL,t_PrintUI,(void*)&NodeArg) !=0 )
+
+		if(pthread_create(&print_Ui_Thread,NULL,t_Print_Ui,(void*)&sock) !=0 )
 		{
-			error_handling("PrintUI_Thread create error\n");
+			error_Handling("printUIThread create error\n");
 			continue;
 		}
 
-		if((fd_num=select(fd_max+1, &cpy_reads, 0, 0, NULL))==-1)
+		if((fd_Num=select(fd_Max+1, &cpy_Reads, 0, 0, NULL))==-1)
 		{
 			perror("select 함수 에러 내용 : ");
 			break;
 		}
 
-		if(fd_num==0)
+		if(fd_Num==0)
 			continue;
 
 		if(FD_ISSET(sock, &reads))
 		{
-			handle_connection(sock,&reads);
+			handle_Connection(sock,&reads);
 		}
 	}
 	close(sock);
-	free(head);
 	return 0;
 }
 
-void error_handling(char *message)
+void error_Handling(char *message)
 {
 	fputs(message, stderr);
 	fputc('\n', stderr);
 	//exit(1);
 }
 
-void *handle_connection(int sock_num, fd_set *reads)
+void *handle_Connection(int sock, fd_set *reads)
 {
-	int sock = sock_num;
-	char name_msg[BUF_SIZE];
-	int str_len = 0;
+	char name_Msg[BUF_SIZE];
+	int str_Len = 0;
 
-	Packet *recv_packet = malloc(sizeof(Packet));
-	memset(recv_packet,0,sizeof(Packet));
+	packet *recv_Packet = malloc(sizeof(packet));
+	memset(recv_Packet,0,sizeof(packet));
 	// 구조체 정보 먼저 받기, 커맨드인지 출력물인지 
-	str_len = read(sock,(char*)recv_packet,sizeof(Packet));
-	if(str_len == 0)
+	str_Len = read(sock,(char*)recv_Packet,sizeof(packet));
+	if(str_Len == 0)
 	{
 		FD_CLR(sock, reads);
 		close(sock);
@@ -188,117 +159,122 @@ void *handle_connection(int sock_num, fd_set *reads)
 	}
 	else 
 	{
-		if(strcmp(recv_packet->Separator,"Command")==0)
+		if(strcmp(recv_Packet->separator,"Command")==0)
 		{
-			if(strcmp(recv_packet->TargetName,name)==0)
+			if(strcmp(recv_Packet->target_Name,name)==0)
 			{
 				FILE *fp;
-				fp = popen(recv_packet->buf,"r");
+				fp = popen(recv_Packet->buf,"r");
 				if(fp == NULL)
 				{
 					perror("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
-					return (void*)-1;
+					return NULL;
 				}
-				while(fgets(recv_packet->buf,BUF_SIZE,fp))
+				while(fgets(recv_Packet->buf,BUF_SIZE,fp))
 				{
 					//printf("\ninsideof command fgets func\n");
-					Packet *send_packet = malloc(sizeof(Packet));
-					memset(send_packet,0,sizeof(Packet));
-					strcpy(send_packet->Separator,"Print_Result");
-					strcpy(send_packet->buf,recv_packet->buf);
-					strcpy(send_packet->TargetName,recv_packet->TargetName);
-					strcpy(send_packet->MyName,recv_packet->MyName);
-					if(write(sock,(char*)send_packet,sizeof(Packet)) <= 0)
+					packet *send_Packet = malloc(sizeof(packet));
+					memset(send_Packet,0,sizeof(packet));
+					strcpy(send_Packet->separator,"Print_Result");
+					strcpy(send_Packet->buf,recv_Packet->buf);
+					strcpy(send_Packet->target_Name,recv_Packet->target_Name);
+					strcpy(send_Packet->my_Name,recv_Packet->my_Name);
+					if(write(sock,(char*)send_Packet,sizeof(packet)) <= 0)
 					{
 						close(sock);
 						break;
 					}
-					free(send_packet);
+					free(send_Packet);
 				}
 				pclose(fp);
 			}
 			else
 			{
-				free(recv_packet);
+				free(recv_Packet);
 				return NULL;
 			}
-			free(recv_packet);
+			free(recv_Packet);
 			return NULL;
 		}
 
-		else if (strcmp(recv_packet->Separator,"Print_Result")==0)
+		else if (strcmp(recv_Packet->separator,"Print_Result")==0)
 		{
 			//printf("myname : %s\n",recv_packet->MyName);
-			if(strcmp(recv_packet->MyName,name)==0)
+			if(strcmp(recv_Packet->my_Name,name)==0)
 			{
-				printf("\n%s from : %s",recv_packet->buf,recv_packet->TargetName);
+				printf("\n%s from : %s",recv_Packet->buf,recv_Packet->target_Name);
 			}
 			else
 			{
-				free(recv_packet);
+				free(recv_Packet);
 				return NULL;
 			}
 		}
 
-		else if (strcmp(recv_packet->Separator,"Message")==0)
+		else if (strcmp(recv_Packet->separator,"Message")==0)
 		{
-			if (strcmp(recv_packet->TargetName,"ALL")==0)
+			if (strcmp(recv_Packet->target_Name,"ALL")==0)
 			{
-				printf("\nMessage : %s from : %s \n",recv_packet->buf,recv_packet->MyName);
+				printf("\nMessage : %s from : %s \n",recv_Packet->buf,recv_Packet->my_Name);
 			}
-			else if(strcmp(recv_packet->TargetName,name)==0)
+			else if(strcmp(recv_Packet->target_Name,name)==0)
 			{
-				printf("\n귓속말 Message : %s from : %s \n",recv_packet->buf,recv_packet->MyName);
+				printf("\n귓속말 Message : %s from : %s \n",recv_Packet->buf,recv_Packet->my_Name);
 			}
 		}
 
-		else if (strcmp(recv_packet->Separator,"List")==0)
+		else if (strcmp(recv_Packet->separator,"List")==0)
 		{
-			printf("\nClient List : \n%s",recv_packet->buf);
+			printf("\nClient List : \n%s",recv_Packet->buf);
 		}
 
-		else if (strcmp(recv_packet->Separator,"Error")==0)
+		else if (strcmp(recv_Packet->separator,"Error")==0)
 		{
-			if(strcmp(recv_packet->MyName,name)==0)
+			if(strcmp(recv_Packet->my_Name,name)==0)
 			{
-				printf("\n %s <- %s \n",recv_packet->TargetName,recv_packet->buf);
+				printf("\n %s <- %s \n",recv_Packet->target_Name,recv_Packet->buf);
+			}
+		}
+
+		else if (strcmp(recv_Packet->separator,"CMDHistory")==0)
+		{
+			if(strcmp(recv_Packet->my_Name,name)==0)
+			{
+				printf("\n %s \n",recv_Packet->buf);
 			}
 		}
 	}
-	free(recv_packet);
+	free(recv_Packet);
 	return NULL;
 }
 
-void *t_PrintUI(void *arg)
+void *t_Print_Ui(void *arg)
 {
-	//int sock= *((int*)arg);
-	SockAndNode *data = (SockAndNode*)arg;
-	int sock = data->sock;
-	NODE *head = data -> node;
-	int nMenu = 0;
+	int sock= *((int*)arg);
+	int menu_Num = 0;
 
 	pthread_mutex_lock(&mutx);
-	while((nMenu = PrintUI()) !=0)
+	while((menu_Num = print_Ui()) !=0)
 	{
-		switch(nMenu)
+		switch(menu_Num)
 		{
 			case 1:
-				getList(sock);
+				get_List(sock);
 				break;
 			case 2:
-				send_message(sock);
+				send_Message(sock);
 				break;
 			case 3:
-				send_cmd(sock,head);
+				send_Cmd(sock);
 				break;
 			case 4:
-				getHistory(head);
+				get_History(sock);
 				break;
 			case 5:
-				disConnect(sock, head);
+				disConnect(sock);
 				break;
 			case 6:
-				convertStatus(sock);
+				convert_Status(sock);
 				break;
 			default:
 				printf("메뉴의 보기에 있는 숫자 중에서 입력하세요.\n");
@@ -309,9 +285,9 @@ void *t_PrintUI(void *arg)
 }
 
 
-int PrintUI()
+int print_Ui()
 {
-	int nInput = 0;
+	int input_Num = 0;
 	// system("cls");
 	printf("\n===================================================\n");
 	printf("[1]유저목록보기\t [2] 메세지보내기\t [3]명령어보내기\n");
@@ -320,57 +296,59 @@ int PrintUI()
 	printf("번호를 입력하세요 : ");
 
 	// 사용자가 선택한 메뉴의 값을 반환한다.
-	scanf("%d", &nInput);
+	scanf("%d", &input_Num);
 	//getchar();
 	//버퍼에 남은 엔터 제거용
 	while (getchar() != '\n'); //scanf_s 버퍼 비우기, 밀림 막음
-	if (nInput > 6 || nInput < 1)
+	if (input_Num > 6 || input_Num < 1)
 	{
-		nInput = 7; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
+		input_Num = 7; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
 	}
-	return nInput;
+	return input_Num;
 }
 
-void clearInputBuffer()
+void clear_Input_Buffer()
 {
     // 입력 버퍼에서 문자를 계속 꺼내고 \n를 꺼내면 반복을 중단
     while (getchar() != '\n');
 }
 
-void getList(int sock)
+void get_List(int sock)
 {
 	char buf[1024];
-	Packet *send_packet = malloc(sizeof(Packet));
-	memset(send_packet,0,sizeof(Packet));
+	packet *send_Packet = malloc(sizeof(packet));
+	memset(send_Packet,0,sizeof(packet));
 	
-	strcpy(send_packet->Separator,"List");
-	write(sock, (char*)send_packet,sizeof(Packet));
-	free(send_packet);
+	strcpy(send_Packet->separator,"List");
+	write(sock, (char*)send_Packet,sizeof(packet));
+	free(send_Packet);
  
 	return;
 }
 
-void getHistory(NODE *list)
+void get_History(int sock)
 {
-	showHistory(list);
+	packet *send_Packet = malloc(sizeof(packet));
+	memset(send_Packet,0,sizeof(packet));
+	strcpy(send_Packet->separator,"CMDHistory");
+	strcpy(send_Packet->my_Name,name);
+	write(sock, (char*)send_Packet,sizeof(packet));
+	free(send_Packet);
 	return;
 }
 
-void disConnect(int sock, NODE *list)
+void disConnect(int sock)
 {
 	printf("\n서버와의 접속이 종료됩니다.\n");
-	saveHistory(list);
-	freeHistory(list);
-	history_Count = 0;
 	exit(0);	// 정상종료 
 }
 
-void send_message(int sock)   // send to all
+void send_Message(int sock)   // send to all
 {
 	int clnt_sock = sock;
-	Packet *send_packet = malloc(sizeof(Packet));
-	memset(send_packet,0,sizeof(Packet));
-	char name_msg[BUF_SIZE];
+	packet *send_Packet = malloc(sizeof(packet));
+	memset(send_Packet,0,sizeof(packet));
+	char name_Msg[BUF_SIZE];
 	printf("===================================================\n");
 	printf("[1] 전체보내기\t [2] 귓속말보내기\t [3] 처음 화면으로 돌아가기\t\n");
 	printf("===================================================\n");
@@ -378,8 +356,8 @@ void send_message(int sock)   // send to all
 	int index;
 	scanf("%d",&index);
 
-	strcpy(send_packet->Separator,"Message");
-	strcpy(send_packet->MyName,name);
+	strcpy(send_Packet->separator,"Message");
+	strcpy(send_Packet->my_Name,name);
 
 	if (index == 1)
 	{
@@ -387,13 +365,13 @@ void send_message(int sock)   // send to all
 		printf("전체 보내기 모드입니다.\n");
 		printf("===================================================\n");
 		printf("보낼 메세지를 입력하세요 : ");
-		clearInputBuffer();
-		fgets(name_msg,BUF_SIZE,stdin);
-		strcpy(send_packet->TargetName,"ALL");
-		strcpy(send_packet->buf,name_msg);
-		if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
+		clear_Input_Buffer();
+		fgets(name_Msg,BUF_SIZE,stdin);
+		strcpy(send_Packet->target_Name,"ALL");
+		strcpy(send_Packet->buf,name_Msg);
+		if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
 		{
-				error_handling("전체 메세지 전송실패\n");
+				error_Handling("전체 메세지 전송실패\n");
 		}
 		printf("전체 메세지 보내기 전송 완료\n");
 	}
@@ -401,23 +379,23 @@ void send_message(int sock)   // send to all
 	{
 		printf("===================================================\n");
 		printf("귓속말 보낼 닉네임을 입력하세요\n");
-		char TargetName[20];
-		scanf("%s",TargetName);
-		if(strcmp(TargetName,name)==0)
+		char target_Name[20];
+		scanf("%s",target_Name);
+		if(strcmp(target_Name,name)==0)
 		{
 			printf("자기 자신한테 귓속말을 보낼 수 없습니다.\n");
 		}
 		else
 		{
-			strcpy(send_packet->TargetName,TargetName);
-			clearInputBuffer();
+			strcpy(send_Packet->target_Name,target_Name);
+			clear_Input_Buffer();
 			printf("===================================================\n");
 			printf("귓속말 보낼 내용을 입력하세요\n");
-			fgets(name_msg,BUF_SIZE,stdin);
-			strcpy(send_packet->buf,name_msg);
-			if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
+			fgets(name_Msg,BUF_SIZE,stdin);
+			strcpy(send_Packet->buf,name_Msg);
+			if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
 			{
-				error_handling("귓속말 전송실패\n");
+				error_Handling("귓속말 전송실패\n");
 			}
 			printf("유저상태 전송 완료\n");
 		}
@@ -433,22 +411,22 @@ void send_message(int sock)   // send to all
 		printf("위의 제공된 번호 목록 중에서 선택하세요, 처음 메뉴로 돌아갑니다\n");
 	}
 
-	free(send_packet);
+	free(send_Packet);
 	return;
 }
-void send_cmd(int sock, NODE *list)   // send to all
+void send_Cmd(int sock)   // send to all
 {
 	printf("===================================================\n");
 	printf("명령어 보내기 모드입니다.\n");
 	printf("===================================================\n");
 	printf("명령어를 보낼 타겟 클라이언트 닉네임을 입력하세요 : ");
 
-	Packet *send_packet = malloc(sizeof(Packet));
-	memset(send_packet,0,sizeof(Packet));
+	packet *send_Packet = malloc(sizeof(packet));
+	memset(send_Packet,0,sizeof(packet));
 
-	char TargetName[20];
-	scanf("%s",TargetName);
-	if(strcmp(TargetName,name)==0)
+	char target_Name[20];
+	scanf("%s",target_Name);
+	if(strcmp(target_Name,name)==0)
 	{
 		printf("자기 자신한테 귓속말을 보낼 수 없습니다.\n");
 	}
@@ -458,226 +436,53 @@ void send_cmd(int sock, NODE *list)   // send to all
 		printf("상대방에게 보낼 명령어를 입력하세요 : ");
 		char buf[20];
 		scanf("%s",buf);
-		appendHistory(list,buf);
-		strcpy(send_packet->Separator,"Command");
-		strcpy(send_packet->MyName,name);
-		//printf("when send cmd check name :%s",send_packet->MyName);
-		strcpy(send_packet->TargetName,TargetName);
-		strcpy(send_packet->buf,buf);
-		write(sock, (char*)send_packet,sizeof(Packet));
+		strcpy(send_Packet->separator,"Command");
+		strcpy(send_Packet->my_Name,name);
+		strcpy(send_Packet->target_Name,target_Name);
+		strcpy(send_Packet->buf,buf);
+		write(sock, (char*)send_Packet,sizeof(packet));
 		printf("명령어 전송이 완료되었습니다.\n");
 	}
-	history_Count++;
-	free(send_packet);
+	free(send_Packet);
 	return;
 }
 
-void appendHistory(NODE *list, char *cmd)
+bool convert_Status(int sock)
 {
-	if(list->next == NULL)
-	{
-		NODE *newNode = malloc(sizeof(NODE));
-		strcpy(newNode->cmd,cmd);
-		newNode->next = NULL;
-		list->next = newNode;
-	}
-	else 
-	{
-		NODE *cur = list;
-		while(cur->next != NULL)
-		{
-			cur = cur->next;
-		}
-		NODE *newNode = malloc(sizeof(NODE));
-		strcpy(newNode->cmd,cmd);
-		newNode->next = NULL;
-		cur->next = newNode;
-	}
-	return;
-}
-
-void showHistory(NODE *list)
-{
-	if(list->next != NULL)
-	{
-		int cnt = 1;
-		NODE *cur = list->next;
-		printf("===================================================\n");
-		printf("내가 보낸 명령어 기록입니다.\n");
-		while(cur != NULL)
-		{
-			printf("%d : %s\n",cnt,cur->cmd);
-			cur = cur->next;
-			cnt++;
-		}
-	}
-	else
-	{
-		printf("고객님의 명령어 기록이 0입니다.\n");
-		return;
-	}
-}
-
-void saveHistory(NODE *list)
-{
-	int str_len=0;
-	char cmd[20];
-	char FilePath[30];
-
-	FILE *fp;
-	strcpy(cmd,"pwd");
-	fp = popen(cmd,"r");
-	if(fp == NULL)
-	{
-		perror("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
-		return (void*)-1;
-	}
-	fgets(FilePath,30,fp);
-	pclose(fp);
-
-	str_len = strlen(FilePath);
-	FilePath[str_len-1] = '/';
-
-	FILE* stream;
-	NODE* pHead = list;
-	strcat(FilePath,name);
-	strcat(FilePath,".dat");
-	//printf("FilePath : %s\n",FilePath);
-
-	stream = fopen(FilePath, "wb");
-	if (stream == NULL) 
-	{
-		error_handling("파일 스트림 생성 실패\n");
-		return;
-	}
-	fwrite(&history_Count, sizeof(history_Count), 1, stream);
-	if(pHead!=NULL)
-	{
-		pHead = pHead->next;
-		while (pHead != NULL) 
-		{
-			//printf("저장부분 명령어 : %s, 주소 : %p",pHead->cmd, pHead->next);
-			fwrite(pHead, sizeof(NODE), 1, stream);
-			pHead = pHead->next;
-		}
-	}
-	fclose(stream);
-}
-
-NODE* loadHistory(NODE *list)
-{
-	int str_len=0;
-	char cmd[20];
-	char FilePath[30];
-
-	FILE *fp;
-	strcpy(cmd,"pwd");
-	fp = popen(cmd,"r");
-	if(fp == NULL)
-	{
-		perror("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
-		return (void*)-1;
-	}
-	fgets(FilePath,30,fp);
-	pclose(fp);
-
-	str_len = strlen(FilePath);
-	FilePath[str_len-1] = '/';
-
-	strcat(FilePath,name);
-	strcat(FilePath,".dat");
-
-	//printf("FilePath : %s\n",FilePath);
-	FILE* stream;
-	NODE* pHead = malloc(sizeof(NODE));;
-	NODE* pLast = NULL;
-
-	stream = fopen(FilePath, "rb");
-	if (stream == NULL) 
-	{
-		error_handling("현재 닉네임 이전 명령어기록 파일 없음.\n");
-		return list;
-	}
-	fread(&history_Count, sizeof(history_Count), 1, stream);
-	if (history_Count == 0) 
-	{
-		error_handling("이전 같은 닉네임의 명령어 송신 기록은 0입니다.\n");
-		return list;
-	}
-	printf("현재 닉네임으로 저장 된 명령어 기록 수는 %d개 입니다.\n\n", history_Count);
-
-	for (int i = 0; i < history_Count; i++) 
-	{
-		if(pHead->next == NULL)
-		{
-			NODE *newNode = malloc(sizeof(NODE));
-			pHead->next = newNode;
-			pLast = newNode;
-			fread(newNode, sizeof(NODE), 1, stream);
-			strcpy(pLast->cmd,newNode->cmd);
-			pLast->next = NULL;
-		}
-		else 
-		{
-			NODE *newNode = malloc(sizeof(NODE));
-			pLast->next = newNode;
-			pLast = pLast->next;
-			fread(newNode, sizeof(NODE), 1, stream);
-			strcpy(pLast->cmd,newNode->cmd);
-			pLast->next = NULL;
-		}
-	}
-	fclose(stream);
-	return pHead;
-}
-
-void freeHistory(NODE *list)
-{
-	while (list != NULL) 
-	{
-		NODE* cur = list;
-		list = cur->next;
-		free(cur);
-	}
-	return;
-}
-
-bool convertStatus(int sock)
-{
-	Packet *send_packet = malloc(sizeof(Packet));
-	memset(send_packet,0,sizeof(Packet));
-	if (statusFlag == true)
+	packet *send_Packet = malloc(sizeof(packet));
+	memset(send_Packet,0,sizeof(packet));
+	if (status_Flag == true)
 	{
 		printf("===================================================\n");
 		printf("현재 OnLine 상태입니다. OffLine 상태로 변환합니다.\n");
 		printf("===================================================\n");
-		strcpy(send_packet->buf,"OffLine");
-		strcpy(send_packet->Separator,"Change_Status");
-		strcpy(send_packet->MyName,name);
-		if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
+		strcpy(send_Packet->buf,"OffLine");
+		strcpy(send_Packet->separator,"Change_Status");
+		strcpy(send_Packet->my_Name,name);
+		if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
 		{
-			error_handling("유저상태 전송 실패\n");
+			error_Handling("유저상태 전송 실패\n");
 			exit(0);
 		}
 		printf("유저상태 전송 완료\n");
-		statusFlag = false;
+		status_Flag = false;
 	}
 	else 
 	{
 		printf("===================================================\n");
 		printf("현재 OffLine 상태입니다. OnLine 상태로 변환합니다.\n");
 		printf("===================================================\n");
-		strcpy(send_packet->buf,"OnLine");
-		strcpy(send_packet->Separator,"Change_Status");
-		strcpy(send_packet->MyName,name);
-		if(write(sock, (char*)send_packet,sizeof(Packet))<=0)
+		strcpy(send_Packet->buf,"OnLine");
+		strcpy(send_Packet->separator,"Change_Status");
+		strcpy(send_Packet->my_Name,name);
+		if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
 		{
-			error_handling("유저상태 전송 실패\n");
+			error_Handling("유저상태 전송 실패\n");
 			exit(0);
 		}
 		printf("유저상태 전송 완료\n");
-		statusFlag = true;
+		status_Flag = true;
 	}
-	free(send_packet);
-	return statusFlag;
+	free(send_Packet);
+	return status_Flag;
 }
