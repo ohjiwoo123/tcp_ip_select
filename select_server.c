@@ -9,7 +9,6 @@
 #include <netinet/in.h>
 #include <pthread.h>
 
-// 100 -> 1024
 #define BUF_SIZE 1024
 #define MAX_CLNT 256
 
@@ -30,15 +29,14 @@ typedef struct
 	char nickName[20];
 	char user_Status[10];
 	int port;
+	char buf[1024];
 }user_ManageMent;
-#pragma pack(pop)
 
-#pragma pack(push,1)
 typedef struct
 {
 	char ip_Address[16];
 	int port;
-	char separator[20];	// “Command”, “Print_Result”, “DisConnect”
+	char separator[20];
 	char my_Name[20];
 	char target_Name[20];
 	char buf[1024];
@@ -71,7 +69,6 @@ void *handle_Connection(int sock, fd_set *reads, node *list);
 int search_Node(node *list, char *name, int history_Count);
 
 /// Thread ///
-void *handle_Clnt(void * arg);
 void *t_Print_Ui(void *data);
 /////////////
 void error_Handling(char *buf);
@@ -97,7 +94,6 @@ int main(int argc, char *argv[])
 
 	socklen_t adr_Sz;
 	int fd_Max, str_Len, fd_Num, i;
-	char buf[BUF_SIZE];
 	sock_And_Node node_Arg;
 
 	if(argc!=2) 
@@ -126,6 +122,7 @@ int main(int argc, char *argv[])
 	{
 		node_Arg.sock = clnt_Sock;
 		node_Arg.node = head;
+		int flag_Num = -1;
 
 		if(pthread_create(&print_Ui_Thread,NULL,t_Print_Ui,(void*)&node_Arg) !=0 )
 		{
@@ -136,8 +133,6 @@ int main(int argc, char *argv[])
 		cpy_Reads=reads;
 		//timeout.tv_sec=5;
 		//timeout.tv_usec=5000;
-
-		//printf("fd_max : %d\n",fd_max);
 
 		if((fd_Num=select(fd_Max+1, &cpy_Reads, 0, 0, NULL))==-1)
 		{
@@ -158,12 +153,9 @@ int main(int argc, char *argv[])
 						accept(serv_Sock, (struct sockaddr*)&clnt_Adr, &adr_Sz);
 					FD_SET(clnt_Sock, &reads);
 					if(fd_Max<clnt_Sock)
+					{
 						fd_Max=clnt_Sock;
-
-					strcpy(socket_Info_Array[clnt_Cnt].ip_Address,inet_ntoa(clnt_Adr.sin_addr));
-					socket_Info_Array[clnt_Cnt].port = (int)ntohs(clnt_Adr.sin_port);
-					socket_Info_Array[clnt_Cnt].sock_Num = clnt_Sock;
-
+					}
 					printf("connected client: %d \n", clnt_Sock);
 
 					// accept 이후 유저 아이피, 포트, 닉네임 읽어오기 
@@ -173,13 +165,43 @@ int main(int argc, char *argv[])
 					{
 						error_Handling("Reading User_Info Failed\n");
 					}
+
+					// 중복 닉네임이 들어 올 시, 연결 취소 
+					for (int j=0; j<clnt_Cnt; j++)
+					{
+						if(strcmp(socket_Info_Array[j].nickName,user_Packet->nickName)==0)
+						{
+							packet *send_Packet = malloc(sizeof(packet));
+							memset(send_Packet,0,sizeof(packet));
+							strcpy(send_Packet->separator,"Error_2");
+							strcpy(send_Packet->buf,"중복된 닉네임입니다.\n다른 닉네임으로 접속하세요\n");
+							if(write(clnt_Sock, (char*)send_Packet,sizeof(packet))<=0)
+							{
+								error_Handling("Sending List Error\n");
+							}
+							shutdown(clnt_Sock,SHUT_WR);
+							flag_Num = clnt_Sock;
+							free(send_Packet);
+						}
+					}
+
+					if(flag_Num == clnt_Sock)
+					{
+						free(user_Packet);
+						continue;
+					}
+					/////////
+				
+					strcpy(socket_Info_Array[clnt_Cnt].ip_Address,inet_ntoa(clnt_Adr.sin_addr));
+					socket_Info_Array[clnt_Cnt].port = (int)ntohs(clnt_Adr.sin_port);
+					socket_Info_Array[clnt_Cnt].sock_Num = clnt_Sock;
 					strcpy(socket_Info_Array[clnt_Cnt].nickName,user_Packet->nickName);
 					strcpy(socket_Info_Array[clnt_Cnt].user_Status,user_Packet->user_Status);
 
-					head = load_History(head,user_Packet);
+					clnt_Cnt++;
 
 					free(user_Packet);
-					clnt_Cnt++;
+					head = load_History(head,user_Packet);
 					continue;
 				}
 				else    // read message!
@@ -270,6 +292,7 @@ void send_Cmd(int sock, packet *p, node *list)   // send to all
 	{
 		error_Handling("Sending List Error\n");
 	}
+	return;
 }
 
 void send_List(int sock, packet *p)   // send to all
@@ -296,6 +319,7 @@ void send_List(int sock, packet *p)   // send to all
 	{
 		error_Handling("Sending List Error\n");
 	}
+	return;
 }
 
 void send_Msg(int sock, packet *p)   // send to all
@@ -308,6 +332,7 @@ void send_Msg(int sock, packet *p)   // send to all
 			error_Handling("send error\n");
 		}
 	}
+	return;
 }
 
 int print_Ui()
@@ -349,46 +374,28 @@ void get_List()
 void disConnect()
 {
 	int index;
+	int flag_Num = -1;
 	printf("삭제할 소켓 번호를 입력하세요 :\n");
 	scanf("%d",&index);
-	shutdown(index,SHUT_WR);
+	for(int i=0; i<clnt_Cnt; i++)
+	{
+		if(socket_Info_Array[i].sock_Num==index)
+		{
+			shutdown(index,SHUT_WR);
+			flag_Num = index;
+			break;
+		}
+	}
+	if(flag_Num == -1)
+	{
+		printf("해당 소켓번호 : %d -> 현재 접속 목록에 없습니다.\n",index);
+	}
+	return;
 }
 
 void get_History(node *list)
 {
-	int cnt = 0;
-	char target_Name[20];
-	printf("명령어 기록을 확인하고 싶은 닉네임을 입력하세요\n");
-	scanf("%s",target_Name);
-	if(list->next != NULL)
-	{
-		node *cur = list->next;
-		printf("===================================================\n");
-		printf("명령어 기록입니다.\n");
-		printf("list->nickName : %s , target_Name : %s list->cmd : %s\n",cur->nickName,target_Name,cur->cmd);
-		while(cur != NULL)
-		{
-			if(strcmp(cur->nickName,target_Name)==0)
-			{
-				++cnt;
-				printf("%s의 %d번 명령어 기록: %s\n",cur->nickName,cnt,cur->cmd);
-				cur = cur->next;
-				//cnt++;
-			}
-			else
-			{
-				cur = cur->next;
-			}
-		}
-		if (cnt == 0)
-		{
-			printf("해당 닉네임의 명령어 기록이 %d 입니다.\n",cnt);
-		}
-	}
-	else
-	{
-		printf("명령어 기록이 0입니다.\n");
-	}
+	show_History(list);
 	return;
 }
 
@@ -396,7 +403,6 @@ void *handle_Connection(int sock, fd_set *reads, node *list)
 {
 	int clnt_Sock= sock;
 	int str_Len=0, i;
-	char msg[BUF_SIZE];
 
 	packet *recv_Packet = malloc(sizeof(packet));
 	if (recv_Packet == NULL)
@@ -413,7 +419,9 @@ void *handle_Connection(int sock, fd_set *reads, node *list)
 		FD_CLR(clnt_Sock, reads);
 		close(clnt_Sock);
 		printf("%d 번 소켓 연결이 종료되었습니다.\n", clnt_Sock);
+
 		save_History(list,clnt_Sock);
+
 		for(int i=0; i<clnt_Cnt; i++)
 		{
 			if(socket_Info_Array[i].sock_Num == clnt_Sock)
@@ -437,8 +445,7 @@ void *handle_Connection(int sock, fd_set *reads, node *list)
 				}
 			}
 		}
-		save_History(list,clnt_Sock);
-		//free_History(list);
+		//save_History(list,clnt_Sock);
 
 		free(recv_Packet);
 		return NULL;
@@ -519,7 +526,6 @@ void *handle_Connection(int sock, fd_set *reads, node *list)
 			{
 				strcpy(recv_Packet->buf,"해당 닉네임의 명령어 기록이 0입니다.");
 				send_Msg(clnt_Sock,recv_Packet);
-				//send_Cmd(clnt_sock,recv_Packet,head);
 			}
 			else
 			{
@@ -545,7 +551,7 @@ void append_History(node *list, packet *p, int sock)
 	else 
 	{
 		node *cur = list;
-		while(cur->nex != NULL)
+		while(cur->next != NULL)
 		{
 			cur = cur->next;
 		}
@@ -559,16 +565,72 @@ void append_History(node *list, packet *p, int sock)
 	return;
 }
 
+void show_History(node *list)
+{
+	int cnt = 0;
+	int flag_Num = -1;
+	char target_Name[20];
+	printf("명령어 기록을 확인하고 싶은 닉네임을 입력하세요\n");
+	scanf("%s",target_Name);
+	for(int i=0; i<clnt_Cnt; i++)
+	{
+		if(strcmp(socket_Info_Array[i].nickName,target_Name)==0)
+		{
+			flag_Num = 1;
+			break;
+		}
+	}
+	if(flag_Num == -1)
+	{
+		printf("해당 닉네임(%s)은 접속 목록에 존재하지 않습니다.\n",target_Name);
+		return;
+	}
+	if(list->next != NULL)
+	{
+		node *cur = list->next;
+		printf("===================================================\n");
+		printf("명령어 기록입니다.\n");
+		//printf("list->nickName : %s , target_Name : %s list->cmd : %s\n",cur->nickName,target_Name,cur->cmd);
+		while(cur != NULL)
+		{
+			if(strcmp(cur->nickName,target_Name)==0)
+			{
+				++cnt;
+				printf("%s의 %d번 명령어 기록: %s\n",cur->nickName,cnt,cur->cmd);
+				cur = cur->next;
+				//cnt++;
+			}
+			else
+			{
+				cur = cur->next;
+			}
+		}
+		if (cnt == 0)
+		{
+			printf("해당 %s 닉네임의 명령어 기록이 %d 입니다.\n",target_Name,cnt);
+		}
+	}
+	else
+	{
+		printf("전체 명령어 기록이 0입니다.\n");
+	}
+	return;
+}
+
 void save_History(node *list, int sock)
 {
 	node* head_Ptr = list;
 	int str_Len = 0;
 	int history_Count = 0;
-	int count = 0;
+	int index = -1;
+
 	char cmd[20];
 	char file_Path[30];
 	char name[20];
+	memset(cmd,0,sizeof(cmd));
+	memset(file_Path,0,sizeof(file_Path));
 	memset(name,0,sizeof(name));
+
 	FILE *fp;
 	strcpy(cmd,"pwd");
 	fp = popen(cmd,"r");
@@ -588,12 +650,20 @@ void save_History(node *list, int sock)
 		if(socket_Info_Array[i].sock_Num == sock)
 		{
 			strcpy(name,socket_Info_Array[i].nickName);
+			index = sock;
 			break;
 		}
 	}
+
+	if(index==-1)
+	{
+		//printf("소켓 관리 배열에 저장 된 소켓번호가 없습니다.\n");
+		return;
+	}
+
 	// 해당 name을 Search 하고, 명령어 개수를 Count하시오.
-	count = search_Node(list,name,history_Count);
-	if(count == 0)
+	history_Count = search_Node(list,name,history_Count);
+	if(history_Count == 0)
 	{
 		return;
 	}
@@ -609,7 +679,7 @@ void save_History(node *list, int sock)
 		error_Handling("파일 스트림 생성 실패\n");
 		return;
 	}
-	fwrite(&count, sizeof(count), 1, stream);
+	fwrite(&history_Count, sizeof(history_Count), 1, stream);
 	if(head_Ptr!=NULL)
 	{
 		head_Ptr = head_Ptr->next;
@@ -651,7 +721,10 @@ node* load_History(node *list, user_ManageMent *p)
 	char cmd[20];
 	char file_Path[30];
 	char name[20];
+	memset(cmd,0,sizeof(cmd));
+	memset(file_Path,0,sizeof(file_Path));
 	memset(name,0,sizeof(name));
+
 	strcpy(name,p->nickName);
 
 	node* head_Ptr = malloc(sizeof(node));

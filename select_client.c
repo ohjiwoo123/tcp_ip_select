@@ -18,15 +18,14 @@ typedef struct
 	char nickName[20];
 	char user_Status[10];
 	int port;
+	char buf[1024];
 }user_ManageMent;
-#pragma pack(pop)
 
-#pragma pack(push,1)
 typedef struct
 {
 	char ip_Address[16];
 	int port;
-	char separator[20];	// “Command”, “Print_Result”, “DisConnect”
+	char separator[20];
 	char my_Name[20];
 	char target_Name[20];
 	char buf[1024];
@@ -67,7 +66,12 @@ int main(int argc, char *argv[])
 		printf("Usage : %s <IP> <port> <name>\n", argv[0]);
 		exit(1);
 	}
-	
+	if(strlen(argv[3]) > 19)
+	{
+		printf("닉네임 최대 글자 수 는 19글자 입니다.\n");
+		printf("프로그램을 종료합니다.\n");
+		exit(1);
+	}
 	sprintf(name, "%s", argv[3]);
 
 	sock=socket(PF_INET, SOCK_STREAM, 0);   
@@ -80,10 +84,14 @@ int main(int argc, char *argv[])
 	serv_Adr.sin_port=htons(atoi(argv[2]));
 	
 	if(connect(sock, (struct sockaddr*)&serv_Adr, sizeof(serv_Adr))==-1)
+	{
 		error_Handling("connect() error!\n");
+		exit(1);
+	}
 	else
+	{
 		puts("Connected...........");
-
+	}
 	user_ManageMent *user_Packet = malloc(sizeof(user_ManageMent));
 	memset(user_Packet,0,sizeof(user_ManageMent));
 	strcpy(user_Packet->ip_Address, argv[1]);
@@ -95,8 +103,7 @@ int main(int argc, char *argv[])
 	{
 		error_Handling("Sending UserInfo Failed!!\n");
 	}
-	//printf("send UserInfo Success\n");
-	//printf("sock_num : %d\n",sock);
+
 	free(user_Packet);
 
 	FD_ZERO(&reads);
@@ -138,6 +145,7 @@ void error_Handling(char *message)
 {
 	fputs(message, stderr);
 	fputc('\n', stderr);
+	return;
 	//exit(1);
 }
 
@@ -236,6 +244,13 @@ void *handle_Connection(int sock, fd_set *reads)
 			}
 		}
 
+		else if (strcmp(recv_Packet->separator,"Error_2")==0)
+		{
+			printf("해당 닉네임 : %s -> %s",name,recv_Packet->buf);
+			printf("프로그램을 종료합니다.\n");
+			exit(0);	// 정상종료 
+		}
+
 		else if (strcmp(recv_Packet->separator,"CMDHistory")==0)
 		{
 			if(strcmp(recv_Packet->my_Name,name)==0)
@@ -311,6 +326,7 @@ void clear_Input_Buffer()
 {
     // 입력 버퍼에서 문자를 계속 꺼내고 \n를 꺼내면 반복을 중단
     while (getchar() != '\n');
+	return;
 }
 
 void get_List(int sock)
@@ -347,8 +363,9 @@ void send_Message(int sock)   // send to all
 {
 	int clnt_sock = sock;
 	packet *send_Packet = malloc(sizeof(packet));
-	memset(send_Packet,0,sizeof(packet));
 	char name_Msg[BUF_SIZE];
+	memset(send_Packet,0,sizeof(packet));
+	memset(name_Msg,0,sizeof(name_Msg));
 	printf("===================================================\n");
 	printf("[1] 전체보내기\t [2] 귓속말보내기\t [3] 처음 화면으로 돌아가기\t\n");
 	printf("===================================================\n");
@@ -397,7 +414,7 @@ void send_Message(int sock)   // send to all
 			{
 				error_Handling("귓속말 전송실패\n");
 			}
-			printf("유저상태 전송 완료\n");
+			printf("귓속말 전송 완료\n");
 		}
 	}
 	else if (index == 3)
@@ -425,6 +442,7 @@ void send_Cmd(int sock)   // send to all
 	memset(send_Packet,0,sizeof(packet));
 
 	char target_Name[20];
+	memset(target_Name,0,sizeof(target_Name));
 	scanf("%s",target_Name);
 	if(strcmp(target_Name,name)==0)
 	{
