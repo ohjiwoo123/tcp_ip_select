@@ -27,6 +27,7 @@ int main()
 	printf("%d\n",sizeof(packet));
 	printf("%d\n",sizeof(packet->name));
 	printf("%s\n",packet->name);
+	printf("PR test\n");
 
 	return 0;
 }
