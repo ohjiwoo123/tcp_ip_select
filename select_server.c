@@ -200,8 +200,8 @@ int main(int argc, char *argv[])
 
 					clnt_Cnt++;
 
-					free(user_Packet);
 					head = load_History(head,user_Packet);
+					free(user_Packet);
 					continue;
 				}
 				else    // read message!
