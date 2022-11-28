@@ -10,6 +10,8 @@
 #define BUF_SIZE 1024
 #define NAME_SIZE 20
 
+#define NOT_CONNECTED_ERROR "NOT_CONNECTED_ERROR"
+#define DUPLICATE_NICKNAME_ERROR "DUPLICATE_NICKNAME_ERROR"
 
 #pragma pack(push,1)
 typedef struct
@@ -25,6 +27,7 @@ typedef struct
 {
 	char ip_Address[16];
 	int port;
+	int file_Size;
 	char separator[20];
 	char my_Name[20];
 	char target_Name[20];
@@ -35,21 +38,21 @@ typedef struct
 void disConnect(int sock);
 void send_Cmd(int sock);
 int print_Ui();
-void error_Handling(char *message);
+void error_Handling(char* message);
 void clear_Input_Buffer();
 void get_List(int sock);
 void get_History(int sock);
 void send_Message(int sock);
 bool convert_Status(int sock);
-void *handle_Connection(int sock, fd_set *reads);
-void *t_Print_Ui(void *data);
+void* handle_Connection(int sock, fd_set* reads);
+void* t_Print_Ui(void* data);
 
-char name[NAME_SIZE]="[DEFAULT]";
+char name[NAME_SIZE] = "[DEFAULT]";
 char msg[BUF_SIZE];
 pthread_mutex_t mutx;
 bool status_Flag;
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	int fd_Max, str_Len, fd_Num, i, sock;
 
@@ -61,12 +64,12 @@ int main(int argc, char *argv[])
 	pthread_t print_Ui_Thread;
 	pthread_mutex_init(&mutx, NULL);
 
-	if(argc!=4)
+	if (argc != 4)
 	{
 		printf("Usage : %s <IP> <port> <name>\n", argv[0]);
 		exit(1);
 	}
-	if(strlen(argv[3]) > 19)
+	if (strlen(argv[3]) > 19)
 	{
 		printf("닉네임 최대 글자 수 는 19글자 입니다.\n");
 		printf("프로그램을 종료합니다.\n");
@@ -74,16 +77,16 @@ int main(int argc, char *argv[])
 	}
 	sprintf(name, "%s", argv[3]);
 
-	sock=socket(PF_INET, SOCK_STREAM, 0);   
-	if(sock==-1)
+	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (sock == -1)
 		error_Handling("socket() error\n");
-	
+
 	memset(&serv_Adr, 0, sizeof(serv_Adr));
-	serv_Adr.sin_family=AF_INET;
-	serv_Adr.sin_addr.s_addr=inet_addr(argv[1]);
-	serv_Adr.sin_port=htons(atoi(argv[2]));
-	
-	if(connect(sock, (struct sockaddr*)&serv_Adr, sizeof(serv_Adr))==-1)
+	serv_Adr.sin_family = AF_INET;
+	serv_Adr.sin_addr.s_addr = inet_addr(argv[1]);
+	serv_Adr.sin_port = htons(atoi(argv[2]));
+
+	if (connect(sock, (struct sockaddr*)&serv_Adr, sizeof(serv_Adr)) == -1)
 	{
 		error_Handling("connect() error!\n");
 		exit(1);
@@ -92,14 +95,14 @@ int main(int argc, char *argv[])
 	{
 		puts("Connected...........");
 	}
-	user_ManageMent *user_Packet = malloc(sizeof(user_ManageMent));
-	memset(user_Packet,0,sizeof(user_ManageMent));
+	user_ManageMent* user_Packet = malloc(sizeof(user_ManageMent));
+	memset(user_Packet, 0, sizeof(user_ManageMent));
 	strcpy(user_Packet->ip_Address, argv[1]);
 	user_Packet->port = serv_Adr.sin_port;
-	strcpy(user_Packet->nickName,name);
-	strcpy(user_Packet->user_Status,"Online");
+	strcpy(user_Packet->nickName, name);
+	strcpy(user_Packet->user_Status, "Online");
 	status_Flag = true;
-	if(write(sock,(char*)user_Packet,sizeof(user_ManageMent)) <= 0)
+	if (write(sock, (char*)user_Packet, sizeof(user_ManageMent)) <= 0)
 	{
 		error_Handling("Sending UserInfo Failed!!\n");
 	}
@@ -109,39 +112,39 @@ int main(int argc, char *argv[])
 	FD_ZERO(&reads);
 	FD_SET(0, &reads);
 	FD_SET(sock, &reads);
-	fd_Max=sock;
+	fd_Max = sock;
 
-	while(1) 
+	while (1)
 	{
-		cpy_Reads=reads;
+		cpy_Reads = reads;
 		//timeout.tv_sec=5;
 		//timeout.tv_usec=5000;
 
-		if(pthread_create(&print_Ui_Thread,NULL,t_Print_Ui,(void*)&sock) !=0 )
+		if (pthread_create(&print_Ui_Thread, NULL, t_Print_Ui, (void*)&sock) != 0)
 		{
 			error_Handling("printUIThread create error\n");
 			continue;
 		}
 
-		if((fd_Num=select(fd_Max+1, &cpy_Reads, 0, 0, NULL))==-1)
+		if ((fd_Num = select(fd_Max + 1, &cpy_Reads, 0, 0, NULL)) == -1)
 		{
 			perror("select 함수 에러 내용 : ");
 			break;
 		}
 
-		if(fd_Num==0)
+		if (fd_Num == 0)
 			continue;
 
-		if(FD_ISSET(sock, &reads))
+		if (FD_ISSET(sock, &reads))
 		{
-			handle_Connection(sock,&reads);
+			handle_Connection(sock, &reads);
 		}
 	}
 	close(sock);
 	return 0;
 }
 
-void error_Handling(char *message)
+void error_Handling(char* message)
 {
 	fputs(message, stderr);
 	fputc('\n', stderr);
@@ -149,45 +152,45 @@ void error_Handling(char *message)
 	//exit(1);
 }
 
-void *handle_Connection(int sock, fd_set *reads)
+void* handle_Connection(int sock, fd_set* reads)
 {
 	char name_Msg[BUF_SIZE];
 	int str_Len = 0;
 
-	packet *recv_Packet = malloc(sizeof(packet));
-	memset(recv_Packet,0,sizeof(packet));
+	packet* recv_Packet = malloc(sizeof(packet));
+	memset(recv_Packet, 0, sizeof(packet));
 	// 구조체 정보 먼저 받기, 커맨드인지 출력물인지 
-	str_Len = read(sock,(char*)recv_Packet,sizeof(packet));
-	if(str_Len == 0)
+	str_Len = read(sock, (char*)recv_Packet, sizeof(packet));
+	if (str_Len == 0)
 	{
 		FD_CLR(sock, reads);
 		close(sock);
-		printf("\nclosed client: %d \n",sock);
+		printf("\nclosed client: %d \n", sock);
 		exit(1);
 	}
-	else 
+	else
 	{
-		if(strcmp(recv_Packet->separator,"Command")==0)
+		if (strcmp(recv_Packet->separator, "Command") == 0)
 		{
-			if(strcmp(recv_Packet->target_Name,name)==0)
+			if (strcmp(recv_Packet->target_Name, name) == 0)
 			{
-				FILE *fp;
-				fp = popen(recv_Packet->buf,"r");
-				if(fp == NULL)
+				FILE* fp;
+				fp = popen(recv_Packet->buf, "r");
+				if (fp == NULL)
 				{
 					perror("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
 					return NULL;
 				}
-				while(fgets(recv_Packet->buf,BUF_SIZE,fp))
+				while (fgets(recv_Packet->buf, BUF_SIZE, fp))
 				{
 					//printf("\ninsideof command fgets func\n");
-					packet *send_Packet = malloc(sizeof(packet));
-					memset(send_Packet,0,sizeof(packet));
-					strcpy(send_Packet->separator,"Print_Result");
-					strcpy(send_Packet->buf,recv_Packet->buf);
-					strcpy(send_Packet->target_Name,recv_Packet->target_Name);
-					strcpy(send_Packet->my_Name,recv_Packet->my_Name);
-					if(write(sock,(char*)send_Packet,sizeof(packet)) <= 0)
+					packet* send_Packet = malloc(sizeof(packet));
+					memset(send_Packet, 0, sizeof(packet));
+					strcpy(send_Packet->separator, "Print_Result");
+					strcpy(send_Packet->buf, recv_Packet->buf);
+					strcpy(send_Packet->target_Name, recv_Packet->target_Name);
+					strcpy(send_Packet->my_Name, recv_Packet->my_Name);
+					if (write(sock, (char*)send_Packet, sizeof(packet)) <= 0)
 					{
 						close(sock);
 						break;
@@ -205,12 +208,12 @@ void *handle_Connection(int sock, fd_set *reads)
 			return NULL;
 		}
 
-		else if (strcmp(recv_Packet->separator,"Print_Result")==0)
+		else if (strcmp(recv_Packet->separator, "Print_Result") == 0)
 		{
 			//printf("myname : %s\n",recv_packet->MyName);
-			if(strcmp(recv_Packet->my_Name,name)==0)
+			if (strcmp(recv_Packet->my_Name, name) == 0)
 			{
-				printf("\n%s from : %s",recv_Packet->buf,recv_Packet->target_Name);
+				printf("\n%s from : %s", recv_Packet->buf, recv_Packet->target_Name);
 			}
 			else
 			{
@@ -219,43 +222,56 @@ void *handle_Connection(int sock, fd_set *reads)
 			}
 		}
 
-		else if (strcmp(recv_Packet->separator,"Message")==0)
+		else if (strcmp(recv_Packet->separator, "Message") == 0)
 		{
-			if (strcmp(recv_Packet->target_Name,"ALL")==0)
+			if (strcmp(recv_Packet->target_Name, "ALL") == 0)
 			{
-				printf("\nMessage : %s from : %s \n",recv_Packet->buf,recv_Packet->my_Name);
+				printf("\nMessage : %s from : %s \n", recv_Packet->buf, recv_Packet->my_Name);
 			}
-			else if(strcmp(recv_Packet->target_Name,name)==0)
+			else if (strcmp(recv_Packet->target_Name, name) == 0)
 			{
-				printf("\n귓속말 Message : %s from : %s \n",recv_Packet->buf,recv_Packet->my_Name);
-			}
-		}
-
-		else if (strcmp(recv_Packet->separator,"List")==0)
-		{
-			printf("\nClient List : \n%s",recv_Packet->buf);
-		}
-
-		else if (strcmp(recv_Packet->separator,"Error")==0)
-		{
-			if(strcmp(recv_Packet->my_Name,name)==0)
-			{
-				printf("\n %s <- %s \n",recv_Packet->target_Name,recv_Packet->buf);
+				printf("\n귓속말 Message : %s from : %s \n", recv_Packet->buf, recv_Packet->my_Name);
 			}
 		}
 
-		else if (strcmp(recv_Packet->separator,"Error_2")==0)
+		else if (strcmp(recv_Packet->separator, "List") == 0)
 		{
-			printf("해당 닉네임 : %s -> %s",name,recv_Packet->buf);
+			printf("%s\n", recv_Packet->buf);
+		}
+
+		else if (strcmp(recv_Packet->separator, "File") == 0)
+		{
+			FILE* fp;
+			int file_Size;
+			int length_Size;
+			int i;
+			// 패킷 버프랑 다른 것임, 파일전송 읽기용.
+			char buf[BUF_SIZE];
+			char cmd[20];
+			char file_Path[30];
+			char* readBuffer;
+		}
+
+		else if (strcmp(recv_Packet->separator, NOT_CONNECTED_ERROR) == 0)
+		{
+			if (strcmp(recv_Packet->my_Name, name) == 0)
+			{
+				printf("\n %s <- %s \n", recv_Packet->target_Name, recv_Packet->buf);
+			}
+		}
+
+		else if (strcmp(recv_Packet->separator, DUPLICATE_NICKNAME_ERROR) == 0)
+		{
+			printf("해당 닉네임 : %s -> %s", name, recv_Packet->buf);
 			printf("프로그램을 종료합니다.\n");
 			exit(0);	// 정상종료 
 		}
 
-		else if (strcmp(recv_Packet->separator,"CMDHistory")==0)
+		else if (strcmp(recv_Packet->separator, "CMDHistory") == 0)
 		{
-			if(strcmp(recv_Packet->my_Name,name)==0)
+			if (strcmp(recv_Packet->my_Name, name) == 0)
 			{
-				printf("\n %s \n",recv_Packet->buf);
+				printf("\n %s \n", recv_Packet->buf);
 			}
 		}
 	}
@@ -263,37 +279,37 @@ void *handle_Connection(int sock, fd_set *reads)
 	return NULL;
 }
 
-void *t_Print_Ui(void *arg)
+void* t_Print_Ui(void* arg)
 {
-	int sock= *((int*)arg);
+	int sock = *((int*)arg);
 	int menu_Num = 0;
 
 	pthread_mutex_lock(&mutx);
-	while((menu_Num = print_Ui()) !=0)
+	while ((menu_Num = print_Ui()) != 0)
 	{
-		switch(menu_Num)
+		switch (menu_Num)
 		{
-			case 1:
-				get_List(sock);
-				break;
-			case 2:
-				send_Message(sock);
-				break;
-			case 3:
-				send_Cmd(sock);
-				break;
-			case 4:
-				get_History(sock);
-				break;
-			case 5:
-				disConnect(sock);
-				break;
-			case 6:
-				convert_Status(sock);
-				break;
-			default:
-				printf("메뉴의 보기에 있는 숫자 중에서 입력하세요.\n");
-				break;
+		case 1:
+			get_List(sock);
+			break;
+		case 2:
+			send_Message(sock);
+			break;
+		case 3:
+			send_Cmd(sock);
+			break;
+		case 4:
+			get_History(sock);
+			break;
+		case 5:
+			disConnect(sock);
+			break;
+		case 6:
+			convert_Status(sock);
+			break;
+		default:
+			printf("메뉴의 보기에 있는 숫자 중에서 입력하세요.\n");
+			break;
 		}
 	}
 	pthread_mutex_unlock(&mutx);
@@ -324,31 +340,31 @@ int print_Ui()
 
 void clear_Input_Buffer()
 {
-    // 입력 버퍼에서 문자를 계속 꺼내고 \n를 꺼내면 반복을 중단
-    while (getchar() != '\n');
+	// 입력 버퍼에서 문자를 계속 꺼내고 \n를 꺼내면 반복을 중단
+	while (getchar() != '\n');
 	return;
 }
 
 void get_List(int sock)
 {
 	char buf[1024];
-	packet *send_Packet = malloc(sizeof(packet));
-	memset(send_Packet,0,sizeof(packet));
-	
-	strcpy(send_Packet->separator,"List");
-	write(sock, (char*)send_Packet,sizeof(packet));
+	packet* send_Packet = malloc(sizeof(packet));
+	memset(send_Packet, 0, sizeof(packet));
+
+	strcpy(send_Packet->separator, "List");
+	write(sock, (char*)send_Packet, sizeof(packet));
 	free(send_Packet);
- 
+
 	return;
 }
 
 void get_History(int sock)
 {
-	packet *send_Packet = malloc(sizeof(packet));
-	memset(send_Packet,0,sizeof(packet));
-	strcpy(send_Packet->separator,"CMDHistory");
-	strcpy(send_Packet->my_Name,name);
-	write(sock, (char*)send_Packet,sizeof(packet));
+	packet* send_Packet = malloc(sizeof(packet));
+	memset(send_Packet, 0, sizeof(packet));
+	strcpy(send_Packet->separator, "CMDHistory");
+	strcpy(send_Packet->my_Name, name);
+	write(sock, (char*)send_Packet, sizeof(packet));
 	free(send_Packet);
 	return;
 }
@@ -362,19 +378,19 @@ void disConnect(int sock)
 void send_Message(int sock)   // send to all
 {
 	int clnt_sock = sock;
-	packet *send_Packet = malloc(sizeof(packet));
+	packet* send_Packet = malloc(sizeof(packet));
 	char name_Msg[BUF_SIZE];
-	memset(send_Packet,0,sizeof(packet));
-	memset(name_Msg,0,sizeof(name_Msg));
+	memset(send_Packet, 0, sizeof(packet));
+	memset(name_Msg, 0, sizeof(name_Msg));
 	printf("===================================================\n");
 	printf("[1] 전체보내기\t [2] 귓속말보내기\t [3] 처음 화면으로 돌아가기\t\n");
 	printf("===================================================\n");
 	printf("번호를 입력하세요 : ");
 	int index;
-	scanf("%d",&index);
+	scanf("%d", &index);
 
-	strcpy(send_Packet->separator,"Message");
-	strcpy(send_Packet->my_Name,name);
+	strcpy(send_Packet->separator, "Message");
+	strcpy(send_Packet->my_Name, name);
 
 	if (index == 1)
 	{
@@ -383,12 +399,12 @@ void send_Message(int sock)   // send to all
 		printf("===================================================\n");
 		printf("보낼 메세지를 입력하세요 : ");
 		clear_Input_Buffer();
-		fgets(name_Msg,BUF_SIZE,stdin);
-		strcpy(send_Packet->target_Name,"ALL");
-		strcpy(send_Packet->buf,name_Msg);
-		if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
+		fgets(name_Msg, BUF_SIZE, stdin);
+		strcpy(send_Packet->target_Name, "ALL");
+		strcpy(send_Packet->buf, name_Msg);
+		if (write(sock, (char*)send_Packet, sizeof(packet)) <= 0)
 		{
-				error_Handling("전체 메세지 전송실패\n");
+			error_Handling("전체 메세지 전송실패\n");
 		}
 		printf("전체 메세지 보내기 전송 완료\n");
 	}
@@ -397,20 +413,20 @@ void send_Message(int sock)   // send to all
 		printf("===================================================\n");
 		printf("귓속말 보낼 닉네임을 입력하세요\n");
 		char target_Name[20];
-		scanf("%s",target_Name);
-		if(strcmp(target_Name,name)==0)
+		scanf("%s", target_Name);
+		if (strcmp(target_Name, name) == 0)
 		{
 			printf("자기 자신한테 귓속말을 보낼 수 없습니다.\n");
 		}
 		else
 		{
-			strcpy(send_Packet->target_Name,target_Name);
+			strcpy(send_Packet->target_Name, target_Name);
 			clear_Input_Buffer();
 			printf("===================================================\n");
 			printf("귓속말 보낼 내용을 입력하세요\n");
-			fgets(name_Msg,BUF_SIZE,stdin);
-			strcpy(send_Packet->buf,name_Msg);
-			if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
+			fgets(name_Msg, BUF_SIZE, stdin);
+			strcpy(send_Packet->buf, name_Msg);
+			if (write(sock, (char*)send_Packet, sizeof(packet)) <= 0)
 			{
 				error_Handling("귓속말 전송실패\n");
 			}
@@ -438,13 +454,13 @@ void send_Cmd(int sock)   // send to all
 	printf("===================================================\n");
 	printf("명령어를 보낼 타겟 클라이언트 닉네임을 입력하세요 : ");
 
-	packet *send_Packet = malloc(sizeof(packet));
-	memset(send_Packet,0,sizeof(packet));
+	packet* send_Packet = malloc(sizeof(packet));
+	memset(send_Packet, 0, sizeof(packet));
 
 	char target_Name[20];
-	memset(target_Name,0,sizeof(target_Name));
-	scanf("%s",target_Name);
-	if(strcmp(target_Name,name)==0)
+	memset(target_Name, 0, sizeof(target_Name));
+	scanf("%s", target_Name);
+	if (strcmp(target_Name, name) == 0)
 	{
 		printf("자기 자신한테 귓속말을 보낼 수 없습니다.\n");
 	}
@@ -453,12 +469,12 @@ void send_Cmd(int sock)   // send to all
 		printf("===================================================\n");
 		printf("상대방에게 보낼 명령어를 입력하세요 : ");
 		char buf[20];
-		scanf("%s",buf);
-		strcpy(send_Packet->separator,"Command");
-		strcpy(send_Packet->my_Name,name);
-		strcpy(send_Packet->target_Name,target_Name);
-		strcpy(send_Packet->buf,buf);
-		write(sock, (char*)send_Packet,sizeof(packet));
+		scanf("%s", buf);
+		strcpy(send_Packet->separator, "Command");
+		strcpy(send_Packet->my_Name, name);
+		strcpy(send_Packet->target_Name, target_Name);
+		strcpy(send_Packet->buf, buf);
+		write(sock, (char*)send_Packet, sizeof(packet));
 		printf("명령어 전송이 완료되었습니다.\n");
 	}
 	free(send_Packet);
@@ -467,17 +483,17 @@ void send_Cmd(int sock)   // send to all
 
 bool convert_Status(int sock)
 {
-	packet *send_Packet = malloc(sizeof(packet));
-	memset(send_Packet,0,sizeof(packet));
+	packet* send_Packet = malloc(sizeof(packet));
+	memset(send_Packet, 0, sizeof(packet));
 	if (status_Flag == true)
 	{
 		printf("===================================================\n");
 		printf("현재 OnLine 상태입니다. OffLine 상태로 변환합니다.\n");
 		printf("===================================================\n");
-		strcpy(send_Packet->buf,"OffLine");
-		strcpy(send_Packet->separator,"Change_Status");
-		strcpy(send_Packet->my_Name,name);
-		if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
+		strcpy(send_Packet->buf, "OffLine");
+		strcpy(send_Packet->separator, "Change_Status");
+		strcpy(send_Packet->my_Name, name);
+		if (write(sock, (char*)send_Packet, sizeof(packet)) <= 0)
 		{
 			error_Handling("유저상태 전송 실패\n");
 			exit(0);
@@ -485,15 +501,15 @@ bool convert_Status(int sock)
 		printf("유저상태 전송 완료\n");
 		status_Flag = false;
 	}
-	else 
+	else
 	{
 		printf("===================================================\n");
 		printf("현재 OffLine 상태입니다. OnLine 상태로 변환합니다.\n");
 		printf("===================================================\n");
-		strcpy(send_Packet->buf,"OnLine");
-		strcpy(send_Packet->separator,"Change_Status");
-		strcpy(send_Packet->my_Name,name);
-		if(write(sock, (char*)send_Packet,sizeof(packet))<=0)
+		strcpy(send_Packet->buf, "OnLine");
+		strcpy(send_Packet->separator, "Change_Status");
+		strcpy(send_Packet->my_Name, name);
+		if (write(sock, (char*)send_Packet, sizeof(packet)) <= 0)
 		{
 			error_Handling("유저상태 전송 실패\n");
 			exit(0);
@@ -504,3 +520,4 @@ bool convert_Status(int sock)
 	free(send_Packet);
 	return status_Flag;
 }
+
