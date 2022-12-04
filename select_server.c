@@ -61,9 +61,7 @@ typedef struct
 	node* node;
 }sock_And_Node;
 
-node* load_History(node* list, user_ManageMent* p);
 void show_History(node* list);
-void save_History(node* list, int sock);
 void free_History(node* list);
 void get_History(node* list);
 void append_History(node* list, packet* p, int sock);
@@ -204,7 +202,6 @@ int main(int argc, char* argv[])
 
 					clnt_Cnt++;
 
-					head = load_History(head, user_Packet);
 					free(user_Packet);
 					continue;
 				}
@@ -517,8 +514,6 @@ void* handle_Connection(int sock, fd_set* reads, node* list)
 		close(clnt_Sock);
 		printf("%d 번 소켓 연결이 종료되었습니다.\n", clnt_Sock);
 
-		save_History(list, clnt_Sock);
-
 		for (int i = 0; i < clnt_Cnt; i++)
 		{
 			if (socket_Info_Array[i].sock_Num == clnt_Sock)
@@ -542,7 +537,6 @@ void* handle_Connection(int sock, fd_set* reads, node* list)
 				}
 			}
 		}
-		//save_History(list,clnt_Sock);
 
 		free(recv_Packet);
 		return NULL;
@@ -714,91 +708,6 @@ void show_History(node* list)
 	return;
 }
 
-void save_History(node* list, int sock)
-{
-	node* head_Ptr = list;
-	int str_Len = 0;
-	int history_Count = 0;
-	int index = -1;
-
-	char cmd[20];
-	char file_Path[30];
-	char name[20];
-	memset(cmd, 0, sizeof(cmd));
-	memset(file_Path, 0, sizeof(file_Path));
-	memset(name, 0, sizeof(name));
-
-	FILE* fp;
-	strcpy(cmd, "pwd");
-	fp = popen(cmd, "r");
-	if (fp == NULL)
-	{
-		error_Handling("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
-		return;
-	}
-	fgets(file_Path, 30, fp);
-	pclose(fp);
-
-	str_Len = strlen(file_Path);
-	file_Path[str_Len - 1] = '/';
-
-	for (int i = 0; i < clnt_Cnt; i++)
-	{
-		if (socket_Info_Array[i].sock_Num == sock)
-		{
-			strcpy(name, socket_Info_Array[i].nickName);
-			index = sock;
-			break;
-		}
-	}
-
-	if (index == -1)
-	{
-		//printf("소켓 관리 배열에 저장 된 소켓번호가 없습니다.\n");
-		return;
-	}
-
-	// 해당 name을 Search 하고, 명령어 개수를 Count하시오.
-	history_Count = search_Node(list, name, history_Count);
-	if (history_Count == 0)
-	{
-		return;
-	}
-	FILE* stream;
-
-	strcat(file_Path, name);
-	strcat(file_Path, ".dat");
-	//printf("file_Path : %s\n",file_Path);
-
-	stream = fopen(file_Path, "wb");
-	if (stream == NULL)
-	{
-		error_Handling("파일 스트림 생성 실패\n");
-		return;
-	}
-	fwrite(&history_Count, sizeof(history_Count), 1, stream);
-	if (head_Ptr != NULL)
-	{
-		head_Ptr = head_Ptr->next;
-		while (head_Ptr != NULL)
-		{
-			//printf("저장부분 명령어 : %s, 주소 : %p",pHead->cmd, pHead->next);
-			if (strcmp(head_Ptr->nickName, name) == 0)
-			{
-				fwrite(head_Ptr, sizeof(node), 1, stream);
-				head_Ptr = head_Ptr->next;
-			}
-			else
-			{
-				head_Ptr = head_Ptr->next;
-			}
-		}
-	}
-	printf("파일 저장 성공!\n");
-	fclose(stream);
-	return;
-}
-
 void free_History(node* list)
 {
 	while (list != NULL)
@@ -808,88 +717,6 @@ void free_History(node* list)
 		free(cur);
 	}
 	return;
-}
-
-node* load_History(node* list, user_ManageMent* p)
-{
-	int str_Len = 0;
-	int history_Count = 0;
-
-	char cmd[20];
-	char file_Path[30];
-	char name[20];
-	memset(cmd, 0, sizeof(cmd));
-	memset(file_Path, 0, sizeof(file_Path));
-	memset(name, 0, sizeof(name));
-
-	strcpy(name, p->nickName);
-
-	node* head_Ptr = malloc(sizeof(node));
-	node* end_Ptr = NULL;
-
-	FILE* fp;
-	strcpy(cmd, "pwd");
-	fp = popen(cmd, "r");
-	if (fp == NULL)
-	{
-		error_Handling("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
-		return list;
-	}
-	fgets(file_Path, 30, fp);
-	pclose(fp);
-
-	str_Len = strlen(file_Path);
-	file_Path[str_Len - 1] = '/';
-
-	strcat(file_Path, name);
-	strcat(file_Path, ".dat");
-
-	//printf("file_Path : %s\n",file_Path);
-	FILE* stream;
-
-	history_Count = search_Node(list, p->nickName, history_Count);
-	if (history_Count == 0)
-	{
-		return list;
-	}
-
-	stream = fopen(file_Path, "rb");
-	if (stream == NULL)
-	{
-		error_Handling("현재 닉네임 이전 명령어기록 파일 없음.\n");
-		return list;
-	}
-	fread(&history_Count, sizeof(history_Count), 1, stream);
-	if (history_Count == 0)
-	{
-		error_Handling("이전 같은 닉네임의 명령어 송신 기록은 0입니다.\n");
-		return list;
-	}
-	printf("현재 닉네임으로 저장 된 명령어 기록 수는 %d개 입니다.\n\n", history_Count);
-
-	for (int i = 0; i < history_Count; i++)
-	{
-		if (head_Ptr->next == NULL)
-		{
-			node* new_Node = malloc(sizeof(node));
-			head_Ptr->next = new_Node;
-			end_Ptr = new_Node;
-			fread(new_Node, sizeof(node), 1, stream);
-			strcpy(end_Ptr->cmd, new_Node->cmd);
-			end_Ptr->next = NULL;
-		}
-		else
-		{
-			node* new_Node = malloc(sizeof(node));
-			end_Ptr->next = new_Node;
-			end_Ptr = end_Ptr->next;
-			fread(new_Node, sizeof(node), 1, stream);
-			strcpy(end_Ptr->cmd, new_Node->cmd);
-			end_Ptr->next = NULL;
-		}
-	}
-	fclose(stream);
-	return head_Ptr;
 }
 
 int search_Node(node* list, char* name, int history_Count)
