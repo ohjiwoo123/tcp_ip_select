@@ -1,86 +1,8 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/select.h>
-#include <netinet/in.h>
-#include <pthread.h>
+#include "common.h"
+#include "server_struct.h"
+#include "server_func.h"
 
-#define BUF_SIZE 1024
-#define MAX_CLNT 1024
-
-#define NOT_CONNECTED_ERROR "NOT_CONNECTED_ERROR"
-#define DUPLICATE_NICKNAME_ERROR "DUPLICATE_NICKNAME_ERROR"
-
-typedef struct
-{
-	char ip_Address[16];
-	char nickName[20];
-	char user_Status[10];
-	int port;
-	int sock_Num;
-}socket_Info;
-socket_Info socket_Info_Array[256];
-
-#pragma pack(push,1)
-typedef struct
-{
-	char ip_Address[16];
-	char nickName[20];
-	char user_Status[10];
-	int port;
-	char buf[1024];
-}user_ManageMent;
-
-typedef struct
-{
-	char ip_Address[16];
-	int port;
-	int file_Size;
-	char separator[20];
-	char my_Name[20];
-	char target_Name[20];
-	char buf[1024];
-}packet;
-#pragma pack(pop)
-
-typedef struct node
-{
-	char nickName[20];
-	char cmd[20];
-	int sock_Num;
-	struct node* next;
-}node;
-
-typedef struct
-{
-	int sock;
-	node* node;
-}sock_And_Node;
-
-void show_History(node* list);
-void free_History(node* list);
-void get_History(node* list);
-void append_History(node* list, packet* p, int sock);
-void send_Msg(int sock, packet* p);
-void send_Cmd(int sock, packet* p, node* list);
-void* handle_Connection(int sock, fd_set* reads, node* list);
-int search_Node(node* list, char* name, int history_Count);
-
-/// Thread ///
-void* t_Print_Ui(void* data);
-/////////////
-void error_Handling(char* buf);
-int print_Ui();
-void get_History();
-void disConnect();
-void get_List();
 int clnt_Cnt = 0;
-int clnt_Socks[MAX_CLNT];
-pthread_mutex_t mutx;
 
 int main(int argc, char* argv[])
 {
@@ -217,12 +139,6 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-void error_Handling(char* buf)
-{
-	fputs(buf, stderr);
-	fputc('\n', stderr);
-	exit(1);
-}
 
 void* t_Print_Ui(void* arg)
 {
@@ -254,244 +170,6 @@ void* t_Print_Ui(void* arg)
 	pthread_mutex_unlock(&mutx);
 }
 
-void send_Cmd(int sock, packet* p, node* list)   // send to all
-{
-	char buf[1024];
-	char num[10];
-	int history_Count = 0;
-
-	memset(buf, 0, sizeof(buf));
-	//memset(p,0,sizeof(packet));
-	int clnt_Sock = sock;
-	strcat(buf, "명령어 : \n");
-
-	if (list->next != NULL)
-	{
-		node* cur = list->next;
-		while (cur != NULL)
-		{
-			if (strcmp(p->my_Name, cur->nickName) == 0)
-			{
-				history_Count++;
-				sprintf(num, "%d", history_Count);
-				strcat(buf, num);
-				strcat(buf, " : ");
-				strcat(buf, cur->cmd);
-				strcat(buf, "\n");
-				//printf("%d : %s\n",cnt,cur->cmd);
-				cur = cur->next;
-			}
-			else
-			{
-				cur = cur->next;
-			}
-		}
-	}
-	strcpy(p->buf, buf);
-
-	if (write(clnt_Sock, (char*)p, sizeof(packet)) <= 0)
-	{
-		error_Handling("Sending List Error\n");
-	}
-	return;
-}
-
-void send_List(int sock, packet* p)   // send to all
-{
-	char buf[1024];
-	char file_Path[100];
-	char file_Name[20];
-	char cmd[20];
-	char name[20];
-
-	int clnt_Sock;
-	int str_Len;
-	int fseekResult;
-
-	size_t freadResult;
-	long ftellResult;
-	long file_Size;
-
-	FILE* stream;	// 닉네임 저장할 파일 저장용
-	FILE* fp;	// 현재 폴더위치를 구하기 위한 파이프용
-	FILE* rfp; // 닉네임 저장할 파일 읽기용
-
-	clnt_Sock = sock;
-	str_Len = 0;
-	fseekResult = 0;
-	freadResult = 0;
-	ftellResult = 0;
-	file_Size = 0;
-
-	memset(buf, 0, sizeof(buf));
-	memset(p, 0, sizeof(packet));
-	memset(file_Path, 0, sizeof(file_Path));
-	memset(file_Name, 0, sizeof(file_Name));
-	memset(cmd, 0, sizeof(cmd));
-	memset(name, 0, sizeof(name));
-
-	strcpy(cmd, "pwd");
-	fp = popen(cmd, "r");
-	if (fp == NULL)
-	{
-		error_Handling("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
-		return;
-	}
-	fgets(file_Path, sizeof(file_Path), fp);
-	pclose(fp);
-
-	str_Len = strlen(file_Path);
-	file_Path[str_Len - 1] = '/';
-
-	strcpy(name, "user_list");
-	strcat(file_Path, name);
-	strcat(file_Path, ".txt");
-
-	// open file and write file
-	stream = fopen(file_Path, "w");
-	if (stream == NULL)
-	{
-		error_Handling("파일 스트림 생성 실패\n");
-		return;
-	}
-
-	// 화면 처음에 겹쳐 보여서 개행 넣기 
-	strcat(buf, "\n");
-	for (int i = 0; i < clnt_Cnt; i++)
-	{
-		strcat(buf, "닉네임 : ");
-		strcat(buf, socket_Info_Array[i].nickName);
-		strcat(buf, " ");
-		strcat(buf, "온라인 상태여부 : ");
-		strcat(buf, socket_Info_Array[i].user_Status);
-		strcat(buf, "\n");
-
-		fwrite(buf, strlen(buf), 1, stream);
-		memset(buf, 0, sizeof(buf));
-	}
-	fclose(stream);
-
-	//
-	rfp = fopen(file_Path, "r");
-	if (stream == NULL)
-	{
-		error_Handling("when read file, file pointer is null\n");
-	}
-	fseekResult = fseek(rfp, 0, SEEK_END);
-	// fseek 함수, 성공 시 파일 위치 반환, 실패시 -1 반환
-	if (fseekResult == -1)
-	{
-		perror("파일 위치 읽기를 실패하였습니다.\n");
-		return;
-	}
-
-	file_Size = ftell(rfp);
-	//printf("file_Size: %ld\n",file_Size);
-	p->file_Size = file_Size;
-
-	// 파일 포인터 위치 다시 처음으로 옮긴다 
-	fseek(rfp, 0, SEEK_SET);
-
-	strcpy(p->separator, "List");
-
-	char* buffer;
-	buffer = (char*)malloc(sizeof(char) * file_Size);
-	memset(buffer, 0, sizeof(buffer));
-
-	while ((fread(buffer, 1, file_Size, rfp)) > 0)
-	{
-		strcpy(p->buf, buffer);
-		if (write(clnt_Sock, (char*)p, sizeof(packet)) < 0)
-		{
-			printf("Send File(userdata.txt) is Failed\n");
-			break;
-		}
-		memset(buffer, 0, sizeof(buffer));
-		memset(p->buf, 0, sizeof(p->buf));
-	}
-	printf("유저목록 전송을 완료하였습니다!\n");
-	fclose(rfp);
-
-	return;
-}
-
-void send_Msg(int sock, packet* p)   // send to all
-{
-	int clnt_Sock = sock;
-	for (int i = 0; i < clnt_Cnt; i++)
-	{
-		if (write(socket_Info_Array[i].sock_Num, (char*)p, sizeof(packet)) <= 0)
-		{
-			error_Handling("send error\n");
-		}
-	}
-	return;
-}
-
-int print_Ui()
-{
-	int input_Num = 0;
-	// system("cls");
-	printf("===================================================\n");
-	printf("서버 Start\n");
-	printf("---------------------------------------------------\n");
-	printf("[1] 연결현황출력\t [2] 강퇴 기능\t [3] 명령어기록보기\t\n");
-	printf("===================================================\n");
-	printf("번호를 입력하세요 : ");
-
-	// 사용자가 선택한 메뉴의 값을 반환한다.
-	scanf("%d", &input_Num);
-	//getchar();
-	//버퍼에 남은 엔터 제거용
-	while (getchar() != '\n'); //scanf_s 버퍼 비우기, 밀림 막음
-	if (input_Num > 3 || input_Num < 1)
-	{
-		input_Num = 4; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
-	}
-	return input_Num;
-}
-
-void get_List()
-{
-	if (clnt_Cnt == 0)
-	{
-		printf("현재 접속한 인원이 없습니다.\n");
-		return;
-	}
-	for (int i = 0; i < clnt_Cnt; i++)
-	{
-		printf("소켓번호 : %d, IP : %s, Port : %d, 닉네임 : %s, 유저상태 : %s\n", socket_Info_Array[i].sock_Num, socket_Info_Array[i].ip_Address, socket_Info_Array[i].port, socket_Info_Array[i].nickName, socket_Info_Array[i].user_Status);
-	}
-	return;
-}
-
-void disConnect()
-{
-	int index;
-	int flag_Num = -1;
-	printf("삭제할 소켓 번호를 입력하세요 :\n");
-	scanf("%d", &index);
-	for (int i = 0; i < clnt_Cnt; i++)
-	{
-		if (socket_Info_Array[i].sock_Num == index)
-		{
-			shutdown(index, SHUT_WR);
-			flag_Num = index;
-			break;
-		}
-	}
-	if (flag_Num == -1)
-	{
-		printf("해당 소켓번호 : %d -> 현재 접속 목록에 없습니다.\n", index);
-	}
-	return;
-}
-
-void get_History(node* list)
-{
-	show_History(list);
-	return;
-}
 
 void* handle_Connection(int sock, fd_set* reads, node* list)
 {
@@ -626,6 +304,246 @@ void* handle_Connection(int sock, fd_set* reads, node* list)
 	}
 	free(recv_Packet);
 	return NULL;
+}
+
+void send_List(int sock, packet* p)   // send to all
+{
+	char buf[1024];
+	char file_Path[100];
+	char file_Name[20];
+	char cmd[20];
+	char name[20];
+
+	int clnt_Sock;
+	int str_Len;
+	int fseekResult;
+
+	size_t freadResult;
+	long ftellResult;
+	long file_Size;
+
+	FILE* stream;	// 닉네임 저장할 파일 저장용
+	FILE* fp;	// 현재 폴더위치를 구하기 위한 파이프용
+	FILE* rfp; // 닉네임 저장할 파일 읽기용
+
+	clnt_Sock = sock;
+	str_Len = 0;
+	fseekResult = 0;
+	freadResult = 0;
+	ftellResult = 0;
+	file_Size = 0;
+
+	memset(buf, 0, sizeof(buf));
+	memset(p, 0, sizeof(packet));
+	memset(file_Path, 0, sizeof(file_Path));
+	memset(file_Name, 0, sizeof(file_Name));
+	memset(cmd, 0, sizeof(cmd));
+	memset(name, 0, sizeof(name));
+
+	strcpy(cmd, "pwd");
+	fp = popen(cmd, "r");
+	if (fp == NULL)
+	{
+		error_Handling("popen()실패 또는 없는 리눅스 명령어를 입력하였음.\n");
+		return;
+	}
+	fgets(file_Path, sizeof(file_Path), fp);
+	pclose(fp);
+
+	str_Len = strlen(file_Path);
+	file_Path[str_Len - 1] = '/';
+
+	strcpy(name, "user_list");
+	strcat(file_Path, name);
+	strcat(file_Path, ".txt");
+
+	// open file and write file
+	stream = fopen(file_Path, "w");
+	if (stream == NULL)
+	{
+		error_Handling("파일 스트림 생성 실패\n");
+		return;
+	}
+
+	// 화면 처음에 겹쳐 보여서 개행 넣기 
+	strcat(buf, "\n");
+	for (int i = 0; i < clnt_Cnt; i++)
+	{
+		strcat(buf, "닉네임 : ");
+		strcat(buf, socket_Info_Array[i].nickName);
+		strcat(buf, " ");
+		strcat(buf, "온라인 상태여부 : ");
+		strcat(buf, socket_Info_Array[i].user_Status);
+		strcat(buf, "\n");
+
+		fwrite(buf, strlen(buf), 1, stream);
+		memset(buf, 0, sizeof(buf));
+	}
+	fclose(stream);
+
+	//
+	rfp = fopen(file_Path, "r");
+	if (stream == NULL)
+	{
+		error_Handling("when read file, file pointer is null\n");
+	}
+	fseekResult = fseek(rfp, 0, SEEK_END);
+	// fseek 함수, 성공 시 파일 위치 반환, 실패시 -1 반환
+	if (fseekResult == -1)
+	{
+		perror("파일 위치 읽기를 실패하였습니다.\n");
+		return;
+	}
+
+	file_Size = ftell(rfp);
+	//printf("file_Size: %ld\n",file_Size);
+	p->file_Size = file_Size;
+
+	// 파일 포인터 위치 다시 처음으로 옮긴다 
+	fseek(rfp, 0, SEEK_SET);
+
+	strcpy(p->separator, "List");
+
+	char* buffer;
+	buffer = (char*)malloc(sizeof(char) * file_Size);
+	memset(buffer, 0, sizeof(buffer));
+
+	while ((fread(buffer, 1, file_Size, rfp)) > 0)
+	{
+		strcpy(p->buf, buffer);
+		if (write(clnt_Sock, (char*)p, sizeof(packet)) < 0)
+		{
+			printf("Send File(userdata.txt) is Failed\n");
+			break;
+		}
+		memset(buffer, 0, sizeof(buffer));
+		memset(p->buf, 0, sizeof(p->buf));
+	}
+	printf("유저목록 전송을 완료하였습니다!\n");
+	fclose(rfp);
+
+	return;
+}
+
+
+void send_Cmd(int sock, packet* p, node* list)   // send to all
+{
+	char buf[1024];
+	char num[10];
+	int history_Count = 0;
+
+	memset(buf, 0, sizeof(buf));
+	//memset(p,0,sizeof(packet));
+	int clnt_Sock = sock;
+	strcat(buf, "명령어 : \n");
+
+	if (list->next != NULL)
+	{
+		node* cur = list->next;
+		while (cur != NULL)
+		{
+			if (strcmp(p->my_Name, cur->nickName) == 0)
+			{
+				history_Count++;
+				sprintf(num, "%d", history_Count);
+				strcat(buf, num);
+				strcat(buf, " : ");
+				strcat(buf, cur->cmd);
+				strcat(buf, "\n");
+				//printf("%d : %s\n",cnt,cur->cmd);
+				cur = cur->next;
+			}
+			else
+			{
+				cur = cur->next;
+			}
+		}
+	}
+	strcpy(p->buf, buf);
+
+	if (write(clnt_Sock, (char*)p, sizeof(packet)) <= 0)
+	{
+		error_Handling("Sending List Error\n");
+	}
+	return;
+}
+
+void send_Msg(int sock, packet* p)   // send to all
+{
+	int clnt_Sock = sock;
+	for (int i = 0; i < clnt_Cnt; i++)
+	{
+		if (write(socket_Info_Array[i].sock_Num, (char*)p, sizeof(packet)) <= 0)
+		{
+			error_Handling("send error\n");
+		}
+	}
+	return;
+}
+
+int print_Ui()
+{
+	int input_Num = 0;
+	// system("cls");
+	printf("===================================================\n");
+	printf("서버 Start\n");
+	printf("---------------------------------------------------\n");
+	printf("[1] 연결현황출력\t [2] 강퇴 기능\t [3] 명령어기록보기\t\n");
+	printf("===================================================\n");
+	printf("번호를 입력하세요 : ");
+
+	// 사용자가 선택한 메뉴의 값을 반환한다.
+	scanf("%d", &input_Num);
+	//getchar();
+	//버퍼에 남은 엔터 제거용
+	while (getchar() != '\n'); //scanf_s 버퍼 비우기, 밀림 막음
+	if (input_Num > 3 || input_Num < 1)
+	{
+		input_Num = 4; // 0~2 사이의 메뉴 값이 아니라면 defalut로 보내기
+	}
+	return input_Num;
+}
+
+void get_List()
+{
+	if (clnt_Cnt == 0)
+	{
+		printf("현재 접속한 인원이 없습니다.\n");
+		return;
+	}
+	for (int i = 0; i < clnt_Cnt; i++)
+	{
+		printf("소켓번호 : %d, IP : %s, Port : %d, 닉네임 : %s, 유저상태 : %s\n", socket_Info_Array[i].sock_Num, socket_Info_Array[i].ip_Address, socket_Info_Array[i].port, socket_Info_Array[i].nickName, socket_Info_Array[i].user_Status);
+	}
+	return;
+}
+
+void disConnect()
+{
+	int index;
+	int flag_Num = -1;
+	printf("삭제할 소켓 번호를 입력하세요 :\n");
+	scanf("%d", &index);
+	for (int i = 0; i < clnt_Cnt; i++)
+	{
+		if (socket_Info_Array[i].sock_Num == index)
+		{
+			shutdown(index, SHUT_WR);
+			flag_Num = index;
+			break;
+		}
+	}
+	if (flag_Num == -1)
+	{
+		printf("해당 소켓번호 : %d -> 현재 접속 목록에 없습니다.\n", index);
+	}
+	return;
+}
+
+void get_History(node* list)
+{
+	show_History(list);
+	return;
 }
 
 void append_History(node* list, packet* p, int sock)

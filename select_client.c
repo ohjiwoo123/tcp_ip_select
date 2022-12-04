@@ -1,56 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <pthread.h>
-#include <stdbool.h>
-
-#define BUF_SIZE 1024
-#define NAME_SIZE 20
-
-#define NOT_CONNECTED_ERROR "NOT_CONNECTED_ERROR"
-#define DUPLICATE_NICKNAME_ERROR "DUPLICATE_NICKNAME_ERROR"
-
-#pragma pack(push,1)
-typedef struct
-{
-	char ip_Address[16];
-	char nickName[20];
-	char user_Status[10];
-	int port;
-	char buf[1024];
-}user_ManageMent;
-
-typedef struct
-{
-	char ip_Address[16];
-	int port;
-	int file_Size;
-	char separator[20];
-	char my_Name[20];
-	char target_Name[20];
-	char buf[1024];
-}packet;
-#pragma pack(pop)
-
-void disConnect(int sock);
-void send_Cmd(int sock);
-int print_Ui();
-void error_Handling(char* message);
-void clear_Input_Buffer();
-void get_List(int sock);
-void get_History(int sock);
-void send_Message(int sock);
-bool convert_Status(int sock);
-void* handle_Connection(int sock, fd_set* reads);
-void* t_Print_Ui(void* data);
-
-char name[NAME_SIZE] = "[DEFAULT]";
-char msg[BUF_SIZE];
-pthread_mutex_t mutx;
-bool status_Flag;
+#include "common.h"
+#include "client_func.h"
 
 int main(int argc, char* argv[])
 {
@@ -144,13 +93,6 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-void error_Handling(char* message)
-{
-	fputs(message, stderr);
-	fputc('\n', stderr);
-	return;
-	//exit(1);
-}
 
 void* handle_Connection(int sock, fd_set* reads)
 {
