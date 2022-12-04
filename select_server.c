@@ -299,7 +299,7 @@ void send_Cmd(int sock, packet* p, node* list)   // send to all
 void send_List(int sock, packet* p)   // send to all
 {
 	char buf[1024];
-	char file_Path[30];
+	char file_Path[100];
 	char file_Name[20];
 	char cmd[20];
 	char name[20];
