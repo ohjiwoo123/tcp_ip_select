@@ -239,19 +239,6 @@ void* handle_Connection(int sock, fd_set* reads)
 			printf("%s\n", recv_Packet->buf);
 		}
 
-		else if (strcmp(recv_Packet->separator, "File") == 0)
-		{
-			FILE* fp;
-			int file_Size;
-			int length_Size;
-			int i;
-			// 패킷 버프랑 다른 것임, 파일전송 읽기용.
-			char buf[BUF_SIZE];
-			char cmd[20];
-			char file_Path[30];
-			char* readBuffer;
-		}
-
 		else if (strcmp(recv_Packet->separator, NOT_CONNECTED_ERROR) == 0)
 		{
 			if (strcmp(recv_Packet->my_Name, name) == 0)
